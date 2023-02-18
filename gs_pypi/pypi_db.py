@@ -570,6 +570,19 @@ class PypiDBGenerator(DBGenerator):
             try:
                 pkg_data = data["packages"][package]
             except KeyError:
+                # First check whether this is a spurious failure
+                if previous := self.lookup_previous(package):
+                    filtered_package, filtered_version = (
+                        self.previous_package_version(package))
+                    if self.may_add_package(
+                            pkg_db,
+                            Package(category, filtered_package,
+                                    filtered_version),
+                            previous):
+                        nout = self.name_output(package, filtered_package)
+                        _logger.info(f'Resurrecting package {nout}.')
+                        self.stats['resurrected'] += 1
+                    continue
                 # This happens if it is listed in the simple API list, but is
                 # otherwise non-existent.
                 _logger.warn(f'Package {package} is vacuous -- dropping.')
