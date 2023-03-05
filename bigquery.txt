@@ -1,0 +1,15 @@
+SELECT
+  COUNT(*) AS num_downloads,
+  file.project AS package
+FROM
+  `bigquery-public-data.pypi.file_downloads`
+WHERE
+  -- Only query the last four weeks of history
+  DATE(timestamp) BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 28 DAY)
+  AND CURRENT_DATE()
+GROUP BY
+  file.project
+HAVING
+  num_downloads > 1000
+ORDER BY
+  num_downloads DESC

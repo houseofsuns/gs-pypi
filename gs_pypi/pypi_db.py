@@ -100,6 +100,7 @@ class Action(enum.Enum):
     SKIP = 3
     IGNORE = 4
     EXCLUDE = 5
+    SKIMP = 6
 
     def actionable(self):
         return self in {Action.ADD, Action.UPDATE}
@@ -356,6 +357,8 @@ class PypiDBGenerator(DBGenerator):
         self.ignore = ignore
         self.exclude = set(self.combine_config_lists(
             [common_config, config], 'exclude'))
+        self.wanted = set(self.combine_config_lists(
+            [common_config, config], 'wanted'))
         self.substitutions = self.combine_config_dicts(
             [common_config, config], 'substitute')
         # Now proceed with normal flow
@@ -434,7 +437,7 @@ class PypiDBGenerator(DBGenerator):
             if package in self.exclude:
                 action = Action.EXCLUDE
             elif (package in self.ignore['total']
-                  and not os.environ.get('GSPYPI_FORCE_UPDATE')):
+                  and not os.environ.get('GSPYPI_FORCE_IGNORED')):
                 action = Action.IGNORE
                 if package in self.ignore['vacuous']:
                     reason = 'vacuous'
@@ -444,6 +447,11 @@ class PypiDBGenerator(DBGenerator):
                     reason = 'no valid python version'
                 else:
                     reason = 'unknown'
+            elif (not os.environ.get('GSPYPI_INCLUDE_UNCOMMON')
+                  and package not in self.wanted):
+                # by default we update only the most downloaded packages
+                action = Action.SKIMP
+
             if action.actionable():
                 if (not os.environ.get('GSPYPI_FORCE_UPDATE')
                         and (rawmtime := previous.get('mtime'))):
@@ -565,6 +573,23 @@ class PypiDBGenerator(DBGenerator):
                     nout = self.name_output(package, filtered_package)
                     _logger.info(f'Skipped package {nout}.')
                     self.stats['skipped'] += 1
+                continue
+            if notes['action'] is Action.SKIMP:
+                previous = self.lookup_previous(package)
+                if previous:
+                    filtered_package, filtered_version = (
+                        self.previous_package_version(package))
+                    if self.may_add_package(
+                            pkg_db,
+                            Package(category, filtered_package,
+                                    filtered_version),
+                            previous):
+                        nout = self.name_output(package, filtered_package)
+                        _logger.info(f'Skimped (preserved) package {nout}.')
+                        self.stats['skimped-preserved'] += 1
+                else:
+                    _logger.info(f'Skimped (omitted) package {package}.')
+                    self.stats['skimped-omitted'] += 1
                 continue
 
             try:
