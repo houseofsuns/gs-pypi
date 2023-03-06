@@ -140,14 +140,14 @@ def parse_operator(s):
             return Operator.UNEQUAL
         case _:
             _logger.warn(f'Unparsable operator `{s}`.')
-            return Operator.LESS
+            return Operator.GREATEREQUAL
 
 
 def extract_requires_python(requires_python):
-    # FIXME dynamically determine
-    py_available = {Version((2, 7))} | {Version((3, i)) for i in range(5, 12)}
+    py_available = {Version((3, i)) for i in range(9, 12)}
     default_py_versions = list(map(
-        Version, [(3, 8), (3, 9), (3, 10), (3, 11)]))
+        Version, [(3, 9), (3, 10), (3, 11)]))
+    minimal_py = min(default_py_versions)
     py_versions = []
 
     if not requires_python or not requires_python.strip():
@@ -168,7 +168,7 @@ def extract_requires_python(requires_python):
             _logger.warn(f'Unhandled requires_python atom `{req_atom}`!')
     lower = max((version for op, version in req_parsed
                  if op in {Operator.GREATER, Operator.GREATEREQUAL}),
-                default=Version((2, 7)))
+                default=minimal_py)
     major, minor, *_ = lower.components
     py_versions = (
         [Version((major, j)) for j in range(minor, 99)]
@@ -176,6 +176,13 @@ def extract_requires_python(requires_python):
     py_versions = list(sorted(set(py_versions) & py_available))
     for op, version in req_parsed:
         py_versions = [v for v in py_versions if op.compare(v, version)]
+    if (not py_versions
+        and any(op in {Operator.EQUAL, Operator.SIMILAR}
+                for op, _ in req_parsed)):
+        # Fix for broken version specs in the wild.
+        # Some packages supporting e.g. 3.7 and above wrongly depend on ~=3.7.
+        _logger.warn(f'Used default py for boguous spec `{requires_python}`.')
+        return default_py_versions
     return py_versions
 
 
