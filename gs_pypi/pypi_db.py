@@ -651,7 +651,8 @@ class PypiDBGenerator(DBGenerator):
                     or (pkg_data['info'].get('project_urls') or {}).get(
                         'Homepage', ""))
 
-        pkg_license = pkg_data['info']['license']
+        pkg_license = pkg_data['info']['license'] or ''
+        pkg_license = (pkg_license.splitlines() or [''])[0]
         pkg_license = self.convert([common_config, config], "licenses",
                                    pkg_license)
 
