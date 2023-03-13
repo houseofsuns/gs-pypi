@@ -26,17 +26,8 @@ class PypiEbuildWithoutDigestGenerator(DefaultEbuildGenerator):
     """
     def __init__(self, package_db):
         vars_before_inherit = [
-            "realname", "realversion",
+            "realname", "realversion", "repo_uri", "sourcefile",
             {"name": "python_compat", "raw": True},
-            {
-                "name": "repo_uri",
-                "value": ('http://pypi.python.org/packages/source'
-                          '/${REALNAME:0:1}/${REALNAME}/'),
-            },
-            {
-                "name": "sourcefile",
-                "value": '${REALNAME}-${REALVERSION}.tar.gz',
-            },
             {
                 "name": "distutils_use_pep517",
                 "value": "standalone",
@@ -84,7 +75,7 @@ class PypiEbuildWithDigestGenerator(DefaultEbuildGenerator):
         inherit = ["gs-pypi"]
 
         vars_after_description = [
-            "homepage", "license", "src_uri",
+            "homepage", "license", "src_uri", "sourcefile",
             {
                 "name": "restrict",
                 "value": "test",
