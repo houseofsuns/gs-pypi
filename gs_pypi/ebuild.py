@@ -35,7 +35,7 @@ class PypiEbuildWithoutDigestGenerator(DefaultEbuildGenerator):
             },
         ]
 
-        inherit = ["gs-pypi"]
+        inherit = ["python-r1", "gs-pypi"]
 
         vars_after_description = [
             "homepage", "license",
@@ -72,7 +72,7 @@ class PypiEbuildWithDigestGenerator(DefaultEbuildGenerator):
             },
         ]
 
-        inherit = ["gs-pypi"]
+        inherit = ["python-r1", "gs-pypi"]
 
         vars_after_description = [
             "homepage", "license", "src_uri", "sourcefile",
