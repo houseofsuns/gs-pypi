@@ -654,9 +654,13 @@ class PypiDBGenerator(DBGenerator):
         mtime = max(release_dates, default=epoch)
 
         version = pkg_data['info']['version']
-        homepage = (pkg_data['info']['home_page']
-                    or (pkg_data['info'].get('project_urls') or {}).get(
-                        'Homepage', ""))
+        homepage = pkg_data['info']['home_page'] or ""
+        if not homepage:
+            purls = pkg_data['info'].get('project_urls') or {}
+            for key in ["Homepage", "homepage"]:
+                homepage = purls.get(key, "")
+                if homepage:
+                    break
 
         pkg_license = pkg_data['info']['license'] or ''
         pkg_license = (pkg_license.splitlines() or [''])[0]
