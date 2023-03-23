@@ -503,7 +503,8 @@ class PypiDBGenerator(DBGenerator):
         pkg_uries = self.decode_download_uries(pkg_uries)
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=2*os.cpu_count()) as executor:
-            _logger.info("Retrieving individual package info.")
+            _logger.info(f"Retrieving individual package info"
+                         f" ({len(pkg_uries)} entries).")
             modulus = len(pkg_uries) // 200
             if modulus < 1:
                 modulus = 1
