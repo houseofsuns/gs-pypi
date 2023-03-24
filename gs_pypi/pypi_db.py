@@ -307,9 +307,11 @@ def sanitize_package_name(package):
     ret = "".join([x for x in package.replace('.', '-')
                    if ord(x) in allowed_ords_pkg])
     if '-' in ret:
-        # fixup invalid package name due to suffix that looks like a version
+        # Fixup invalid package name due to suffix that looks like a version.
+        # Note that captial letters seem to be allow by PMS but are forbidden
+        # by pkgcore.
         parts = ret.split('-')
-        if len(parts) > 1 and re.fullmatch(r'([0-9\.]+)[a-z]?', parts[-1]):
+        if len(parts) > 1 and re.fullmatch(r'([0-9\.]+)[a-zA-Z]?', parts[-1]):
             ret = '-'.join(parts[:-1]) + '_' + parts[-1]
     return ret
 
