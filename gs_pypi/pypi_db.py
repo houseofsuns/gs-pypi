@@ -299,41 +299,21 @@ def filter_package_name(package, substitutions):
 
 
 def sanitize_package_name(package):
-    allowed_ords_pkg = (
-        set(range(ord('a'), ord('z') + 1))
-        | set(range(ord('A'), ord('Z') + 1))
-        | set(range(ord('0'), ord('9') + 1))
-        | set(list(map(ord, ['+', '_', '-']))))
-    ret = "".join([x for x in package.replace('.', '-')
-                   if ord(x) in allowed_ords_pkg])
+    ret = DBGenerator.filter_characters(package.replace('.', '-'), [
+            ('a', 'z'), ('A', 'Z'), ('0', '9'), '+_-'])
     if '-' in ret:
         # Fixup invalid package name due to suffix that looks like a version.
         # Note that captial letters seem to be allow by PMS but are forbidden
-        # by pkgcore.
+        # by pkgcore, so we play safe.
         parts = ret.split('-')
         if len(parts) > 1 and re.fullmatch(r'([0-9\.]+)[a-zA-Z]?', parts[-1]):
             ret = '-'.join(parts[:-1]) + '_' + parts[-1]
     return ret
 
 
-def sanitize_package_description(description):
-    allowed_ords_desc = (
-        set(range(ord('a'), ord('z') + 1))
-        | set(range(ord('A'), ord('Z') + 1))
-        | set(range(ord('0'), ord('9') + 1))
-        | set(list(map(ord, ['+', '_', '-', ' ', '.', '(', ')', '[', ']',
-                             '{', '}', ',']))))
-    return "".join(x for x in description if ord(x) in allowed_ords_desc)
-
-
 def sanitize_useflag(useflag):
-    allowed_ords_useflag = (
-        set(range(ord('a'), ord('z') + 1))
-        | set(range(ord('A'), ord('Z') + 1))
-        | set(range(ord('0'), ord('9') + 1))
-        | set(list(map(ord, ['+', '_', '@', '-']))))
-    return "".join([x for x in useflag.replace('.', '-')
-                    if ord(x) in allowed_ords_useflag])
+    return DBGenerator.filter_characters(useflag.replace('.', '-'), [
+            ('a', 'z'), ('A', 'Z'), ('0', '9'), '+_-@'])
 
 
 class PypiDBGenerator(DBGenerator):
@@ -664,11 +644,14 @@ class PypiDBGenerator(DBGenerator):
                 homepage = purls.get(key, "")
                 if homepage:
                     break
+        homepage = self.escape_bash_string(self.strip_characters(homepage))
 
         pkg_license = pkg_data['info']['license'] or ''
-        pkg_license = (pkg_license.splitlines() or [''])[0]
+        pkg_license = self.strip_characters(
+            (pkg_license.splitlines() or [''])[0])
         pkg_license = self.convert([common_config, config], "licenses",
                                    pkg_license)
+        pkg_license = self.escape_bash_string(pkg_license)
 
         requires_python = extract_requires_python(
             pkg_data['info']['requires_python'])
@@ -704,9 +687,10 @@ class PypiDBGenerator(DBGenerator):
                     useflags.add(extra)
 
         filtered_package = filter_package_name(package, self.substitutions)
-        filtered_description = sanitize_package_description(
-            pkg_data['info']['summary'] or '')
-        filtered_long_description = sanitize_package_description(
+
+        filtered_description = self.escape_bash_string(self.strip_characters(
+            pkg_data['info']['summary'] or ''))
+        filtered_long_description = self.strip_characters(
             pkg_data['info']['description'] or '')
         filtered_version = version
         version_filters = [(r'^(.*[0-9]+)\.?a([0-9]+)$', r'\1_alpha\2'),
