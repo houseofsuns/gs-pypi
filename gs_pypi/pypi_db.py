@@ -551,6 +551,9 @@ class PypiDBGenerator(DBGenerator):
                 _logger.info(f'Ignored package {package}'
                              f' -- {notes["reason"]}.')
                 self.stats['ignored'] += 1
+                if self.lookup_previous(package):
+                    _logger.info(f'Preexisting entry for ignored'
+                                 f' package {package}.')
                 continue
             if notes['action'] is Action.SKIP:
                 previous = self.lookup_previous(package)
