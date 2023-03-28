@@ -739,7 +739,8 @@ class PypiDBGenerator(DBGenerator):
         ebuild_data["license"] = pkg_license
         ebuild_data["src_uri"] = nice_src_uri
         ebuild_data["sourcefile"] = nice_src_uri.split('/')[-1]
-        ebuild_data["repo_uri"] = '/'.join(nice_src_uri.split('/')[:-1])
+        ebuild_data["repo_uri"] = nice_src_uri.removesuffix(
+            ebuild_data["sourcefile"])
         ebuild_data["python_compat"] = python_compat
         ebuild_data["iuse"] = " ".join(sorted(useflags))
         deplist = serializable_elist(separator="\n\t")
