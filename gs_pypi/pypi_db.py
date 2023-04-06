@@ -308,12 +308,19 @@ def sanitize_package_name(package):
         parts = ret.split('-')
         if len(parts) > 1 and re.fullmatch(r'([0-9\.]+)[a-zA-Z]?', parts[-1]):
             ret = '-'.join(parts[:-1]) + '_' + parts[-1]
+    # guarantee that the package name starts with a letter or number
+    if not re.match(r'^[a-zA-Z0-9]', ret):
+        ret = 'x' + ret
     return ret
 
 
 def sanitize_useflag(useflag):
-    return DBGenerator.filter_characters(useflag.replace('.', '-'), [
+    ret = DBGenerator.filter_characters(useflag.replace('.', '-'), [
             ('a', 'z'), ('A', 'Z'), ('0', '9'), '+_-@'])
+    # guarantee that the useflag starts with a letter or number
+    if not re.match(r'^[a-zA-Z0-9]', ret):
+        ret = 'x' + ret
+    return ret
 
 
 class PypiDBGenerator(DBGenerator):
