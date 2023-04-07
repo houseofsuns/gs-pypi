@@ -657,8 +657,13 @@ class PypiDBGenerator(DBGenerator):
         homepage = self.escape_bash_string(self.strip_characters(homepage))
 
         pkg_license = pkg_data['info']['license'] or ''
-        pkg_license = self.strip_characters(
-            (pkg_license.splitlines() or [''])[0])
+        # This has to avoid any characters that have a special meaning for
+        # dependency specification, these are: !?|^()
+        pkg_license = self.filter_characters(
+            (pkg_license.splitlines() or [''])[0],
+            mask_spec=[
+                ('a', 'z'), ('A', 'Z'), ('0', '9'),
+                ''' #%'*+,-./:;=<>&@[]_{}~'''])
         pkg_license = self.convert([common_config, config], "licenses",
                                    pkg_license)
         pkg_license = self.escape_bash_string(pkg_license)
