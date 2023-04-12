@@ -286,7 +286,12 @@
             "zlib/libpng": "ZLIB",
             "zlib/php": "ZLIB PHP-3.01"
         },
-        "exclude": ["0-._.-._.-._.-._.-._.-._.-0", "0.0.1", "2.5D"],
+        "exclude": [
+            "0-._.-._.-._.-._.-._.-._.-0",
+            "0.0.1",
+            "2.5D",
+            "uselesscapitalquiz"
+        ],
         "nopython": [
         ],
         "wanted": [
