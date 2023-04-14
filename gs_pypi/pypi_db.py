@@ -254,8 +254,16 @@ def extract_requires_dist(requires_dist, substitutions):
                         pass
                     elif (term.startswith('python_version')
                           or term.startswith('python_full_version')):
-                        # FIXME handle python version differences
-                        pass
+                        op = parse_operator(''.join(
+                            c for c in term if c in '=<>!~'))
+                        version = parse_version(''.join(
+                            c for c in term if c in '0123456789.'))
+                        if not any(op.compare(available, version)
+                                   for available in PYTHON_VERSIONS):
+                            skip = True
+                        # FIXME if only some versions match it would be nice
+                        # to make this into a conditional dependency like so:
+                        # $(python_gen_cond_dep 'dev-python/tomli' 3.{9..10})
                     elif ((term.startswith('os_name')
                            or term.startswith('platform_system')
                            or term.startswith('sys_platform'))
