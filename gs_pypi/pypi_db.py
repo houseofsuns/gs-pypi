@@ -36,6 +36,9 @@ from g_sorcery.logger import Logger
 _logger = Logger()
 
 
+PYTHON_VERSIONS = {Version((3, 9)), Version((3, 10)), Version((3, 11))}
+
+
 def containment(fun):
     import functools
 
@@ -144,11 +147,7 @@ def parse_operator(s):
 
 
 def extract_requires_python(requires_python):
-    py_available = {Version((3, i)) for i in range(9, 12)}
-    default_py_versions = list(map(
-        Version, [(3, 9), (3, 10), (3, 11)]))
-    minimal_py = min(default_py_versions)
-    py_versions = []
+    default_py_versions = list(sorted(PYTHON_VERSIONS))
 
     if not requires_python or not requires_python.strip():
         return default_py_versions
@@ -166,14 +165,8 @@ def extract_requires_python(requires_python):
             req_parsed.append((op, version))
         else:
             _logger.warn(f'Unhandled requires_python atom `{req_atom}`!')
-    lower = max((version for op, version in req_parsed
-                 if op in {Operator.GREATER, Operator.GREATEREQUAL}),
-                default=minimal_py)
-    major, minor, *_ = lower.components
-    py_versions = (
-        [Version((major, j)) for j in range(minor, 99)]
-        + [Version((i, j)) for i in range(major+1, 6) for j in range(99)])
-    py_versions = list(sorted(set(py_versions) & py_available))
+
+    py_versions = list(sorted(PYTHON_VERSIONS))
     for op, version in req_parsed:
         py_versions = [v for v in py_versions if op.compare(v, version)]
     if (not py_versions
