@@ -741,8 +741,10 @@ class PypiDBGenerator(DBGenerator):
                             f'/{package[0]}/${{REALNAME}}/{filename}')
 
         ebuild_data = {}
-        ebuild_data["realname"] = package
-        ebuild_data["realversion"] = version
+        ebuild_data["realname"] = (
+            "${PN}" if package == filtered_package else package)
+        ebuild_data["realversion"] = (
+            "${PV}" if version == filtered_version else version)
         ebuild_data["mtime"] = mtime.isoformat()
 
         ebuild_data["description"] = filtered_description
