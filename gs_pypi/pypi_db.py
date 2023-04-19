@@ -340,17 +340,6 @@ class PypiDBGenerator(DBGenerator):
             [common_config, config], 'nopython'))
         ignore['total'] = (ignore['vacuous'] | ignore['nosource']
                            | ignore['nopython'])
-        existing = set(self.old_db_lookup)
-        if existing & ignore['total']:
-            if hits := existing & ignore['vacuous']:
-                _logger.warn(f'Overly broad ignore spec! The following'
-                             f' packages are not vacuous: {hits}.')
-            if hits := existing & ignore['nosource']:
-                _logger.warn(f'Overly broad ignore spec! The following'
-                             f' packages have a source dist: {hits}.')
-            if hits := existing & ignore['nopython']:
-                _logger.warn(f'Overly broad ignore spec! The following'
-                             f' packages have valid python: {hits}.')
         self.ignore = ignore
         self.exclude = set(self.combine_config_lists(
             [common_config, config], 'exclude'))
@@ -620,6 +609,18 @@ class PypiDBGenerator(DBGenerator):
         statstr = ", ".join(f"{key}: {value}"
                             for key, value in sorted(self.stats.items()))
         _logger.info(f'Package ingestion finished (statistics: {statstr})')
+
+        allpkgs = {package.name for package in pkg_db.list_all_packages()}
+        if allpkgs & self.ignore['total']:
+            if hits := allpkgs & self.ignore['vacuous']:
+                _logger.warn(f'Overly broad ignore spec! The following'
+                             f' packages are not vacuous: {hits}.')
+            if hits := allpkgs & self.ignore['nosource']:
+                _logger.warn(f'Overly broad ignore spec! The following'
+                             f' packages have a source dist: {hits}.')
+            if hits := allpkgs & self.ignore['nopython']:
+                _logger.warn(f'Overly broad ignore spec! The following'
+                             f' packages have valid python: {hits}.')
 
     @containment
     def process_datum(self, pkg_db, common_config, config, package,
