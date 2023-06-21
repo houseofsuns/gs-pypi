@@ -36,7 +36,7 @@ from g_sorcery.logger import Logger
 _logger = Logger()
 
 
-PYTHON_VERSIONS = {Version((3, 9)), Version((3, 10)), Version((3, 11))}
+PYTHON_VERSIONS = {Version((3, 10)), Version((3, 11)), Version((3, 12))}
 
 
 def containment(fun):
