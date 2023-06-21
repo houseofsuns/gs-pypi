@@ -179,6 +179,17 @@ def extract_requires_python(requires_python):
     return py_versions
 
 
+def requires_python_from_classifiers(classifiers):
+    default_py_versions = list(sorted(PYTHON_VERSIONS))
+    classifiers = set(classifiers)
+
+    ret = []
+    for version in default_py_versions:
+        if f"Programming Language :: Python :: {version}" in classifiers:
+            ret.append(version)
+    return ret
+
+
 def extract_requires_dist(requires_dist, substitutions):
     ret = []
     if not requires_dist:
@@ -672,6 +683,10 @@ class PypiDBGenerator(DBGenerator):
 
         requires_python = extract_requires_python(
             pkg_data['info']['requires_python'])
+        for addon in requires_python_from_classifiers(
+                pkg_data['info'].get('classifiers', [])):
+            if addon not in requires_python:
+                requires_python.append(addon)
         if not requires_python:
             _logger.warn(f'No valid python versions for {package}'
                          f' -- dropping.')
