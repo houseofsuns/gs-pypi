@@ -295,6 +295,9 @@
         "nopython": [
         ],
         "wanted": [
+            "subman",
+            "schulze-condorcet",
+
             "boto3",
             "urllib3",
             "requests",
