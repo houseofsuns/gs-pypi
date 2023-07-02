@@ -742,12 +742,15 @@ class PypiDBGenerator(DBGenerator):
             _logger.warn(f'Version {bad_version} is bad'
                          f' use {filtered_version}.')
         nice_src_uri = src_uri
-        src_uri_filters = [(f'{package}', '${REALNAME}'),
-                           (f'{version}', '${REALVERSION}')]
+        src_uri_filters = [
+            (f'{package}', '${REALNAME}'),
+            (f'{package.replace("-", "_")}', '${REALNAME//-/_}'),
+            (f'{package.replace("_", "-")}', '${REALNAME//_/-}'),
+            (f'{version}', '${REALVERSION}')]
         for pattern, replacement in src_uri_filters:
             nice_src_uri = nice_src_uri.replace(pattern, replacement)
         filename = nice_src_uri.split('/')[-1]
-        if (filename.startswith('${REALNAME}-${REALVERSION}')
+        if (re.match(r'\$\{REALNAME[-_/]*\}-\$\{REALVERSION\}', filename)
                 and nice_src_uri.startswith('https://files.pythonhosted.org'
                                             '/packages/')
                 and package[0] in string.ascii_letters + string.digits):
