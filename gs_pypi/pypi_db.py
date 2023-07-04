@@ -742,6 +742,7 @@ class PypiDBGenerator(DBGenerator):
             _logger.warn(f'Version {bad_version} is bad'
                          f' use {filtered_version}.')
         nice_src_uri = src_uri
+        filename = nice_src_uri.split('/')[-1]
         src_uri_filters = [
             (f'{package}', '${REALNAME}'),
             (f'{package.replace("-", "_")}', '${REALNAME//-/_}'),
@@ -749,7 +750,10 @@ class PypiDBGenerator(DBGenerator):
             (f'{version}', '${REALVERSION}')]
         for pattern, replacement in src_uri_filters:
             nice_src_uri = nice_src_uri.replace(pattern, replacement)
-        filename = nice_src_uri.split('/')[-1]
+            # This is a bit of work done twice, but determining the filename
+            # later on is rather tedious as the bash substitution operator
+            # introduces additional slashes.
+            filename = filename.replace(pattern, replacement)
         if (re.match(r'\$\{REALNAME[-_/]*\}-\$\{REALVERSION\}', filename)
                 and nice_src_uri.startswith('https://files.pythonhosted.org'
                                             '/packages/')
