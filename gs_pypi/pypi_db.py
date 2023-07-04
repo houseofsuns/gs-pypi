@@ -776,7 +776,7 @@ class PypiDBGenerator(DBGenerator):
         ebuild_data["homepage"] = homepage
         ebuild_data["license"] = pkg_license
         ebuild_data["src_uri"] = nice_src_uri
-        ebuild_data["sourcefile"] = nice_src_uri.split('/')[-1]
+        ebuild_data["sourcefile"] = filename
         ebuild_data["repo_uri"] = nice_src_uri.removesuffix(
             ebuild_data["sourcefile"])
         ebuild_data["python_compat"] = python_compat
