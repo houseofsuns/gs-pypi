@@ -741,27 +741,40 @@ class PypiDBGenerator(DBGenerator):
                 mtime.year, mtime.month, mtime.day)
             _logger.warn(f'Version {bad_version} is bad'
                          f' use {filtered_version}.')
+
         nice_src_uri = src_uri
-        filename = nice_src_uri.split('/')[-1]
-        src_uri_filters = [
-            (f'{package}', '${REALNAME}'),
-            (f'{package.replace("-", "_")}', '${REALNAME//-/_}'),
-            (f'{package.replace("_", "-")}', '${REALNAME//_/-}'),
-            (f'{version}', '${REALVERSION}')]
-        for pattern, replacement in src_uri_filters:
-            nice_src_uri = nice_src_uri.replace(pattern, replacement)
-            # This is a bit of work done twice, but determining the filename
-            # later on is rather tedious as the bash substitution operator
-            # introduces additional slashes.
-            filename = filename.replace(pattern, replacement)
-        if (re.match(r'\$\{REALNAME[-_/]*\}-\$\{REALVERSION\}', filename)
-                and nice_src_uri.startswith('https://files.pythonhosted.org'
-                                            '/packages/')
-                and package[0] in string.ascii_letters + string.digits):
-            # Use redirect URL to avoid churn through the embedded hashes in
-            # the actual URL
-            nice_src_uri = (f'https://files.pythonhosted.org/packages/source'
-                            f'/{package[0]}/${{REALNAME}}/{filename}')
+        filename = src_uri.split('/')[-1]
+        pattern = (r'https://files\.pythonhosted\.org/packages'
+                   r'/[0-9a-f]+/[0-9a-f]+/[0-9a-f]+/.*')
+        if re.fullmatch(pattern, src_uri.lower()):
+            filepath = src_uri.removesuffix(filename)
+            suffix = ''
+            for extension in ['.tar.gz', '.tar.bz2', '.zip']:
+                if filename.endswith(extension):
+                    suffix = extension
+                    filename = filename.removesuffix(extension)
+                    break
+            src_uri_filters = [
+                (f'{version}', '${REALVERSION}'),
+                (f'{package}', '${REALNAME}'),
+                (f'{package.replace("-", "_")}', '${REALNAME//-/_}'),
+                (f'{package.replace("_", "-")}', '${REALNAME//_/-}'),
+            ]
+            for pattern, replacement in src_uri_filters:
+                filename = filename.replace(pattern, replacement)
+            filename = filename + suffix
+            if (re.match(r'\$\{REALNAME[-_/]*\}-\$\{REALVERSION\}', filename)
+                    and package[0] in string.ascii_letters + string.digits):
+                # Use redirect URL to avoid churn through the embedded hashes
+                # in the actual URL
+                nice_src_uri = (
+                    f'https://files.pythonhosted.org/packages/source'
+                    f'/{{REALNAME::1}}/${{REALNAME}}/{filename}')
+            else:
+                _logger.warn(f'Unsubstituted SRC_URI `{src_uri}`.')
+                nice_src_uri = filepath + filename
+        else:
+            _logger.warn(f'Unexpected SRC_URI `{src_uri}`.')
 
         ebuild_data = {}
         ebuild_data["realname"] = (
