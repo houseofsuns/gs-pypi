@@ -769,7 +769,7 @@ class PypiDBGenerator(DBGenerator):
                 # in the actual URL
                 nice_src_uri = (
                     f'https://files.pythonhosted.org/packages/source'
-                    f'/{{REALNAME::1}}/${{REALNAME}}/{filename}')
+                    f'/${{REALNAME::1}}/${{REALNAME}}/{filename}')
             else:
                 _logger.warn(f'Unsubstituted SRC_URI `{src_uri}`.')
                 nice_src_uri = filepath + filename
