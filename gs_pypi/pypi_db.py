@@ -482,7 +482,7 @@ class PypiDBGenerator(DBGenerator):
             if action.actionable():
                 pkg_uries.append(
                     {
-                        "uri": (self.repo_uri + "pypi/" + pathcomponent
+                        "uri": (self.repo_uri + "/pypi/" + pathcomponent
                                 + "/json"),
                         "parser": self.parse_package_page,
                         "output": package,
