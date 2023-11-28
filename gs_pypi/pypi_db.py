@@ -19,10 +19,13 @@ import enum
 import json
 import operator
 import os
+import pathlib
 import pprint
 import random
 import re
 import string
+import subprocess
+import tempfile
 import time
 
 import bs4
@@ -341,17 +344,6 @@ class PypiDBGenerator(DBGenerator):
     """
 
     def generate_tree(self, pkg_db, common_config, config):
-        # First store necessary config for further processing
-        ignore = {}
-        ignore['vacuous'] = set(self.combine_config_lists(
-            [common_config, config], 'vacuous'))
-        ignore['nosource'] = set(self.combine_config_lists(
-            [common_config, config], 'nosource'))
-        ignore['nopython'] = set(self.combine_config_lists(
-            [common_config, config], 'nopython'))
-        ignore['total'] = (ignore['vacuous'] | ignore['nosource']
-                           | ignore['nopython'])
-        self.ignore = ignore
         self.exclude = set(self.combine_config_lists(
             [common_config, config], 'exclude'))
         self.wanted = set(self.combine_config_lists(
@@ -363,6 +355,7 @@ class PypiDBGenerator(DBGenerator):
 
     def pre_clean_for_generation(self, pkg_db):
         """Store a copy."""
+        # FIXME needed?
         self.old_db = copy.deepcopy(pkg_db)
         try:
             self.old_db.read()
@@ -378,23 +371,8 @@ class PypiDBGenerator(DBGenerator):
         """
         Get URI of packages index.
         """
-        self.repo_uri = config["repo_uri"]
-        _logger.info("Retrieving package list.")
-        return [{"uri": self.repo_uri + "/simple/", "output": "packages"}]
-
-    def do_download(self, uri):
-        data = {}
-        attempts = 0
-        while attempts < 7:
-            attempts += 1
-            try:
-                self.process_uri(uri, data)
-            except DownloadingError as error:
-                _logger.warn(str(error))
-                time.sleep(1)
-                continue
-            break
-        return data
+        _logger.info("Retrieving dataset.")
+        return [{"uri": config["data_uri"], "open_file": True}]
 
     def lookup_previous(self, package):
         gentoo_name = filter_package_name(package, self.substitutions)
@@ -411,113 +389,40 @@ class PypiDBGenerator(DBGenerator):
         temp = self.old_db.database['dev-python']['packages'][gentoo_name]
         return (gentoo_name, next(iter(temp.keys())))
 
+    def parse_datum(self, datapath):
+        package = datapath.stem
+        if package in self.exclude:
+            return {}
+        if (not os.environ.get('GSPYPI_INCLUDE_UNCOMMON')
+                and package not in self.wanted):
+            # we only include a selected set of packages as otherwise the
+            # overlay becomes unwieldy
+            return {}
+        with open(datapath, 'r') as datafile:
+            return {package: json.load(datafile)}
+
     def parse_data(self, data_f):
         """
-        Download and parse packages index. Then download and parse pages for
-        all packages.
+        Parse package data.
         """
-        soup = bs4.BeautifulSoup(data_f, 'lxml')
-        data = {
-            '__index': {},
-        }
-
-        _logger.info("Selecting packages for update.")
-        pkg_uries = []
-        for idx, entry in enumerate(soup.find_all('a')):
-            package = entry.string
-            pathcomponent = entry['href'].removeprefix(
-                '/simple/').removesuffix('/')
-
-            previous = self.lookup_previous(package)
-            action = Action.UPDATE if previous else Action.ADD
-            reason = ''
-            if package in self.exclude:
-                action = Action.EXCLUDE
-            elif (package in self.ignore['total']
-                  and not os.environ.get('GSPYPI_FORCE_IGNORED')):
-                action = Action.IGNORE
-                if package in self.ignore['vacuous']:
-                    reason = 'vacuous'
-                elif package in self.ignore['nosource']:
-                    reason = 'no sdist available'
-                elif package in self.ignore['nopython']:
-                    reason = 'no valid python version'
-                else:
-                    reason = 'unknown'
-            elif (not os.environ.get('GSPYPI_INCLUDE_UNCOMMON')
-                  and package not in self.wanted):
-                # by default we update only the most downloaded packages
-                action = Action.SKIMP
-
-            if action.actionable():
-                if (not os.environ.get('GSPYPI_FORCE_UPDATE')
-                        and (rawmtime := previous.get('mtime'))):
-                    mtime = datetime.datetime.fromisoformat(rawmtime)
-                    now = datetime.datetime.now(datetime.timezone.utc)
-                    delta = (now - mtime).total_seconds()
-                    # the logic for skipping a package should have the
-                    # following properties:
-                    # - a package with an update in the last month
-                    #   should not be skipped
-                    # - a package with no update for two or more years is
-                    #   considered dead and should be skipped with high
-                    #   probability
-                    # - in between we interpolate somehow
-                    one_month = 1*30*24*60*60
-                    two_years = 2*365*24*60*60
-                    minimal_probability_sqrt = 0.1
-                    update_probability_sqrt = max(
-                        minimal_probability_sqrt,
-                        1 - ((delta - one_month)
-                             / (two_years - one_month)))
-                    if update_probability_sqrt ** 2 < random.random():
-                        action = Action.SKIP
-
-            data['__index'][package] = {
-                'pathcomponent': pathcomponent,
-                'action': action,
-                'reason': reason,
-            }
-
-            if action.actionable():
-                pkg_uries.append(
-                    {
-                        "uri": (self.repo_uri + "/pypi/" + pathcomponent
-                                + "/json"),
-                        "parser": self.parse_package_page,
-                        "output": package,
-                        "timeout": 2
-                    }
-                )
-
-        pkg_uries = self.decode_download_uries(pkg_uries)
-        with concurrent.futures.ThreadPoolExecutor(
-                max_workers=2*os.cpu_count()) as executor:
-            _logger.info(f"Retrieving individual package info"
-                         f" ({len(pkg_uries)} entries).")
-            modulus = len(pkg_uries) // 200
-            if modulus < 1:
-                modulus = 1
-            normal = self.do_download
-            dotted = print_progress_dot(normal)
-            futures = [
-                executor.submit(normal if idx % modulus != 0 else dotted, uri)
-                for idx, uri in enumerate(pkg_uries)]
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    data.update(future.result())
-                except Exception:
-                    # Simply swallow exceptions, there should be few enough
-                    # and they will be rectified in the next run
-                    pass
-            print()  # Terminate the dots
+        data = {}
+        zipfile = pathlib.Path(data_f.name)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tmpdir = pathlib.Path(tmpdirname)
+            subprocess.run(['unzip', str(zipfile), '-d', str(tmpdir)])
+            datadir = tmpdir / 'pypi-json-data-main' / 'release_data'
+            for firstletterdir in datadir.iterdir():
+                # There exist some metadata files which do not interest us
+                if firstletterdir.is_dir():
+                    for second in firstletterdir.iterdir():
+                        if second.is_dir():
+                            for entry in second.iterdir():
+                                if entry.is_file() and entry.suffix == 'json':
+                                    data.update(self.parse_datum(entry))
+                        elif second.is_file() and second.suffix == 'json':
+                            # Some entries are on the first level
+                            data.update(self.parse_datum(second))
         return data
-
-    def parse_package_page(self, data_f):
-        """
-        Parse package page.
-        """
-        return json.load(data_f)
 
     @staticmethod
     def name_output(package, filtered_package):
@@ -526,11 +431,10 @@ class PypiDBGenerator(DBGenerator):
             ret += f" (as {filtered_package})"
         return ret
 
-    def may_add_package(self, pkg_db, package, data):
+    def maybe_add_package(self, pkg_db, package, data):
         nout = self.name_output(data['realname'], package.name)
         if pkg_db.in_category(package.category, package.name):
             _logger.warn(f"Rejected package {nout} for collision.")
-            self.stats['rejected'] += 1
             return False
         pkg_db.add_package(package, data)
         return True
@@ -548,128 +452,44 @@ class PypiDBGenerator(DBGenerator):
                                       'name': 'Markus Walter'}]
         pkg_db.set_common_data(category, common_data)
 
-        self.stats = collections.defaultdict(lambda: 0)
-
-        for package, notes in data["packages"]["__index"].items():
-            if notes['action'] is Action.EXCLUDE:
-                _logger.info(f'Excluded package {package}.')
-                self.stats['excluded'] += 1
-                continue
-            if notes['action'] is Action.IGNORE:
-                _logger.info(f'Ignored package {package}'
-                             f' -- {notes["reason"]}.')
-                self.stats['ignored'] += 1
-                if self.lookup_previous(package):
-                    _logger.info(f'Preexisting entry for ignored'
-                                 f' package {package}.')
-                continue
-            if notes['action'] is Action.SKIP:
-                previous = self.lookup_previous(package)
-                filtered_package, filtered_version = (
-                    self.previous_package_version(package))
-                if self.may_add_package(
-                        pkg_db,
-                        Package(category, filtered_package, filtered_version),
-                        previous):
-                    nout = self.name_output(package, filtered_package)
-                    _logger.info(f'Skipped package {nout}.')
-                    self.stats['skipped'] += 1
-                continue
-            if notes['action'] is Action.SKIMP:
-                previous = self.lookup_previous(package)
-                if previous:
-                    filtered_package, filtered_version = (
-                        self.previous_package_version(package))
-                    if self.may_add_package(
-                            pkg_db,
-                            Package(category, filtered_package,
-                                    filtered_version),
-                            previous):
-                        nout = self.name_output(package, filtered_package)
-                        _logger.info(f'Skimped (preserved) package {nout}.')
-                        self.stats['skimped-preserved'] += 1
-                else:
-                    _logger.info(f'Skimped (omitted) package {package}.')
-                    self.stats['skimped-omitted'] += 1
-                continue
-
-            try:
-                pkg_data = data["packages"][package]
-            except KeyError:
-                # First check whether this is a spurious failure
-                if previous := self.lookup_previous(package):
-                    filtered_package, filtered_version = (
-                        self.previous_package_version(package))
-                    if self.may_add_package(
-                            pkg_db,
-                            Package(category, filtered_package,
-                                    filtered_version),
-                            previous):
-                        nout = self.name_output(package, filtered_package)
-                        _logger.info(f'Resurrecting package {nout}.')
-                        self.stats['resurrected'] += 1
-                    continue
-                # This happens if it is listed in the simple API list, but is
-                # otherwise non-existent.
-                _logger.warn(f'Package {package} is vacuous -- dropping.')
-                self.stats['vacuous'] += 1
-                continue
+        for package, pkg_data in data['packages'].items():
             self.process_datum(pkg_db, common_config, config, package,
-                               notes, pkg_data)
-
-        statstr = ", ".join(f"{key}: {value}"
-                            for key, value in sorted(self.stats.items()))
-        _logger.info(f'Package ingestion finished (statistics: {statstr})')
-
-        allpkgs = {package.name for package in pkg_db.list_all_packages()}
-        if allpkgs & self.ignore['total']:
-            if hits := allpkgs & self.ignore['vacuous']:
-                _logger.warn(f'Overly broad ignore spec! The following'
-                             f' packages are not vacuous: {hits}.')
-            if hits := allpkgs & self.ignore['nosource']:
-                _logger.warn(f'Overly broad ignore spec! The following'
-                             f' packages have a source dist: {hits}.')
-            if hits := allpkgs & self.ignore['nopython']:
-                _logger.warn(f'Overly broad ignore spec! The following'
-                             f' packages have valid python: {hits}.')
+                               pkg_data)
 
     @containment
-    def process_datum(self, pkg_db, common_config, config, package,
-                      notes, pkg_data):
+    def process_datum(self, pkg_db, common_config, config, package, pkg_data):
         """
         Process one parsed package datum.
         """
         category = "dev-python"
 
-        src_uri = ""
-        for download_info in pkg_data['urls']:
-            if download_info['packagetype'] == 'sdist':
-                src_uri = download_info['url']
-                break
+        pkg_datum = None
+        mtime = None
+        src_uri = None
+        for v, datum in pkg_data.items():
+            for distmeta in datum['urls']:
+                if distmeta['packagetype'] == 'sdist':
+                    currentdate = datetime.fromisoformat(
+                        distmeta['upload_time_iso_8601'])
+                    if mtime is None or mtime < currentdate:
+                        mtime = currentdate
+                        pkg_datum = datum
+                        src_uri = distmeta['url']
         if not src_uri:
             _logger.warn(f'No source distfile for {package} -- dropping.')
-            self.stats['nosource'] += 1
             return
 
-        release_dates = [
-            datetime.datetime.fromisoformat(release['upload_time'])
-            .replace(tzinfo=datetime.timezone.utc)
-            for release_list in pkg_data['releases'].values()
-            for release in release_list]
-        epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-        mtime = max(release_dates, default=epoch)
-
-        version = pkg_data['info']['version']
-        homepage = pkg_data['info']['home_page'] or ""
+        version = pkg_datum['info']['version']
+        homepage = pkg_datum['info']['home_page'] or ""
         if not homepage:
-            purls = pkg_data['info'].get('project_urls') or {}
+            purls = pkg_datum['info'].get('project_urls') or {}
             for key in ["Homepage", "homepage"]:
                 homepage = purls.get(key, "")
                 if homepage:
                     break
         homepage = self.escape_bash_string(self.strip_characters(homepage))
 
-        pkg_license = pkg_data['info']['license'] or ''
+        pkg_license = pkg_datum['info']['license'] or ''
         # This has to avoid any characters that have a special meaning for
         # dependency specification, these are: !?|^()
         pkg_license = self.filter_characters(
@@ -682,15 +502,14 @@ class PypiDBGenerator(DBGenerator):
         pkg_license = self.escape_bash_string(pkg_license)
 
         requires_python = extract_requires_python(
-            pkg_data['info']['requires_python'])
+            pkg_datum['info']['requires_python'])
         for addon in requires_python_from_classifiers(
-                pkg_data['info'].get('classifiers', [])):
+                pkg_datum['info'].get('classifiers', [])):
             if addon not in requires_python:
                 requires_python.append(addon)
         if not requires_python:
             _logger.warn(f'No valid python versions for {package}'
                          f' -- dropping.')
-            self.stats['nopython'] += 1
             return
         py_versions = list(map(
             lambda version: f'{version.components[0]}_{version.components[1]}',
@@ -702,7 +521,7 @@ class PypiDBGenerator(DBGenerator):
             python_compat = '( python{' + (','.join(py_versions)) + '} )'
 
         requires_dist = extract_requires_dist(
-            pkg_data['info']['requires_dist'], self.substitutions)
+            pkg_datum['info']['requires_dist'], self.substitutions)
 
         dependencies = []
         useflags = set()
@@ -721,9 +540,7 @@ class PypiDBGenerator(DBGenerator):
         filtered_package = filter_package_name(package, self.substitutions)
 
         filtered_description = self.escape_bash_string(self.strip_characters(
-            pkg_data['info']['summary'] or ''))
-        filtered_long_description = self.strip_characters(
-            pkg_data['info']['description'] or '')
+            pkg_datum['info']['summary'] or ''))
         filtered_version = version
         version_filters = [(r'^(.*[0-9]+)\.?a([0-9]+)$', r'\1_alpha\2'),
                            (r'^(.*[0-9]+)\.?b([0-9]+)$', r'\1_beta\2'),
@@ -740,7 +557,7 @@ class PypiDBGenerator(DBGenerator):
             filtered_version = "%04d%02d%02d" % (
                 mtime.year, mtime.month, mtime.day)
             _logger.warn(f'Version {bad_version} is bad'
-                         f' use {filtered_version}.')
+                         f' using {filtered_version}.')
 
         nice_src_uri = src_uri
         filename = src_uri.split('/')[-1]
@@ -784,7 +601,6 @@ class PypiDBGenerator(DBGenerator):
         ebuild_data["mtime"] = mtime.isoformat()
 
         ebuild_data["description"] = filtered_description
-        ebuild_data["longdescription"] = filtered_long_description
 
         ebuild_data["homepage"] = homepage
         ebuild_data["license"] = pkg_license
@@ -798,20 +614,10 @@ class PypiDBGenerator(DBGenerator):
         deplist.extend(dependencies)
         ebuild_data["dependencies"] = deplist
 
-        if self.may_add_package(
+        self.maybe_add_package(
                 pkg_db,
                 Package(category, filtered_package, filtered_version),
-                ebuild_data):
-            nout = self.name_output(package, filtered_package)
-            if notes['action'] is Action.ADD:
-                _logger.info(f"Added package {nout}.")
-                self.stats['added'] += 1
-            elif notes['action'] is Action.UPDATE:
-                _logger.info(f"Updated package {nout}.")
-                self.stats['updated'] += 1
-            else:
-                _logger.warn(f"Processed package {nout}.")
-                self.stats['unknown'] += 1
+                ebuild_data)
 
     def convert_internal_dependency(self, configs, dependency):
         """
