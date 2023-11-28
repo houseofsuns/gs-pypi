@@ -1,15 +1,15 @@
 --- distutils-r1.eclass
 +++ gs-distutils-r1.eclass
-@@ -624,7 +624,7 @@
+@@ -636,7 +636,7 @@
  	esac
  
  	_DISTUTILS_TEST_RUNNER=${1}
 -	python_test() { distutils-r1_python_test; }
 +	python_test() { gs-distutils-r1_python_test; }
  
- 	local test_deps=${RDEPEND}
- 	if [[ -n ${test_pkg} ]]; then
-@@ -1055,7 +1055,7 @@
+ 	if [[ -n ${test_pkgs} ]]; then
+ 		if [[ ! ${DISTUTILS_SINGLE_IMPL} ]]; then
+@@ -1059,7 +1059,7 @@
  #
  # At some point in the future, it may also apply eclass-specific
  # distutils patches and/or quirks.
@@ -18,7 +18,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  	_distutils-r1_check_all_phase_mismatch
  
-@@ -1239,6 +1239,10 @@
+@@ -1243,6 +1243,10 @@
  		# if pyproject.toml exists, try getting the backend from it
  		# NB: this could fail if pyproject.toml doesn't list one
  		build_backend=$(gpep517 get-backend)
@@ -29,7 +29,7 @@
  	fi
  	if [[ -z ${build_backend} && ${DISTUTILS_USE_PEP517} == setuptools &&
  		-f setup.py ]]
-@@ -1483,7 +1487,7 @@
+@@ -1479,7 +1483,7 @@
  # In legacy mode, runs 'esetup.py build'. Any parameters passed to this
  # function will be appended to setup.py invocation, i.e. passed
  # as options to the 'build' command.
@@ -38,7 +38,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  
  	_python_check_EPYTHON
-@@ -1599,7 +1603,7 @@
+@@ -1576,7 +1580,7 @@
  # first.
  #
  # This function is used only if distutils_enable_tests is called.
@@ -47,7 +47,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  
  	if [[ -z ${_DISTUTILS_TEST_RUNNER} ]]; then
-@@ -1646,7 +1650,7 @@
+@@ -1623,7 +1627,7 @@
  # In the legacy mode, calls `esetup.py install` to install the package.
  # Any parameters passed to this function will be appended
  # to the setup.py invocation (i.e. as options to the 'install' command).
@@ -56,7 +56,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  
  	_python_check_EPYTHON
-@@ -1763,7 +1767,7 @@
+@@ -1740,7 +1744,7 @@
  # @FUNCTION: distutils-r1_python_install_all
  # @DESCRIPTION:
  # The default python_install_all(). It installs the documentation.
@@ -65,7 +65,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  	_distutils-r1_check_all_phase_mismatch
  
-@@ -1783,7 +1787,7 @@
+@@ -1760,7 +1764,7 @@
  # If in-source builds are used, the command is executed in the directory
  # holding the per-implementation copy of sources. BUILD_DIR points
  # to the 'build' subdirectory.
@@ -74,7 +74,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  
  	if [[ ${DISTUTILS_IN_SOURCE_BUILD} ]]; then
-@@ -1888,7 +1892,7 @@
+@@ -1874,7 +1878,7 @@
  		# store for restoring after distutils-r1_run_phase.
  		local _DISTUTILS_INITIAL_CWD=${PWD}
  		multibuild_foreach_variant \
@@ -83,7 +83,7 @@
  	fi
  }
  
-@@ -1902,7 +1906,7 @@
+@@ -1888,7 +1892,7 @@
  
  	# store for restoring after distutils-r1_run_phase.
  	local _DISTUTILS_INITIAL_CWD=${PWD}
@@ -92,7 +92,7 @@
  
  	if [[ ! ${DISTUTILS_SINGLE_IMPL} ]]; then
  		local _DISTUTILS_CALLING_FOREACH_IMPL=1
-@@ -1918,16 +1922,27 @@
+@@ -1904,16 +1908,27 @@
  	fi
  }
  
@@ -122,7 +122,7 @@
  	fi
  
  	if [[ ! ${_DISTUTILS_DEFAULT_CALLED} ]]; then
-@@ -1941,7 +1956,7 @@
+@@ -1927,7 +1942,7 @@
  	return ${ret}
  }
  
@@ -131,7 +131,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  	local ret=0
  
-@@ -1993,14 +2008,14 @@
+@@ -1979,14 +1994,14 @@
  	fi
  }
  
@@ -148,7 +148,7 @@
  	fi
  
  	if declare -f python_compile_all >/dev/null; then
-@@ -2036,7 +2051,7 @@
+@@ -2022,7 +2037,7 @@
  	fi
  }
  
@@ -157,7 +157,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  	local ret=0
  
-@@ -2167,20 +2182,20 @@
+@@ -2153,20 +2168,20 @@
  	fi
  }
  
