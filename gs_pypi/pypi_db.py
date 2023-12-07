@@ -11,8 +11,6 @@
     :license: GPL-2, see LICENSE for more details.
 """
 
-import collections
-import concurrent.futures
 import copy
 import datetime
 import enum
@@ -21,16 +19,12 @@ import operator
 import os
 import pathlib
 import pprint
-import random
 import re
 import string
 import subprocess
 import tempfile
-import time
 
-import bs4
-
-from g_sorcery.exceptions import DBLayoutError, DownloadingError
+from g_sorcery.exceptions import DBLayoutError
 from g_sorcery.g_collections import (
     Dependency, Package, serializable_elist, Version)
 from g_sorcery.package_db import DBGenerator
@@ -66,18 +60,6 @@ def containment(fun):
     return newfun
 
 
-def print_progress_dot(fun):
-    import functools
-
-    @functools.wraps(fun)
-    def newfun(*args, **kwargs):
-        ret = fun(*args, **kwargs)
-        print('.', end='', flush=True)
-        return ret
-
-    return newfun
-
-
 class Operator(enum.Enum):
     LESS = 1
     LESSEQUAL = 2
@@ -98,18 +80,6 @@ class Operator(enum.Enum):
             Operator.UNEQUAL: operator.ne,
         }
         return comparators[self](first, second)
-
-
-class Action(enum.Enum):
-    ADD = 1
-    UPDATE = 2
-    SKIP = 3
-    IGNORE = 4
-    EXCLUDE = 5
-    SKIMP = 6
-
-    def actionable(self):
-        return self in {Action.ADD, Action.UPDATE}
 
 
 def parse_version(s, minlength=0):
@@ -353,41 +323,12 @@ class PypiDBGenerator(DBGenerator):
         # Now proceed with normal flow
         super().generate_tree(pkg_db, common_config, config)
 
-    def pre_clean_for_generation(self, pkg_db):
-        """Store a copy."""
-        # FIXME needed?
-        self.old_db = copy.deepcopy(pkg_db)
-        try:
-            self.old_db.read()
-        except DBLayoutError:
-            # No DB exists, so we cannot read it
-            pass
-        self.old_db_lookup = {
-            package.name: package
-            for package in self.old_db.list_all_packages()
-        }
-
     def get_download_uries(self, common_config, config):
         """
         Get URI of packages index.
         """
-        _logger.info("Retrieving dataset.")
+        _logger.info('Retrieving package index.')
         return [{"uri": config["data_uri"], "open_file": True}]
-
-    def lookup_previous(self, package):
-        gentoo_name = filter_package_name(package, self.substitutions)
-        try:
-            temp = self.old_db.database['dev-python']['packages'][gentoo_name]
-            # temp contains a map version -> ebuild data and should have size 1
-            return next(iter(temp.values()))
-        except KeyError:
-            return {}
-
-    def previous_package_version(self, package):
-        """May only be called if previous version exists."""
-        gentoo_name = filter_package_name(package, self.substitutions)
-        temp = self.old_db.database['dev-python']['packages'][gentoo_name]
-        return (gentoo_name, next(iter(temp.keys())))
 
     def parse_datum(self, datapath):
         package = datapath.stem
@@ -409,7 +350,8 @@ class PypiDBGenerator(DBGenerator):
         zipfile = pathlib.Path(data_f.name)
         with tempfile.TemporaryDirectory() as tmpdirname:
             tmpdir = pathlib.Path(tmpdirname)
-            subprocess.run(['unzip', str(zipfile), '-d', str(tmpdir)])
+            subprocess.run(['unzip', str(zipfile), '-d', str(tmpdir)],
+                           stdout=subprocess.DEVNULL)
             datadir = tmpdir / 'pypi-json-data-main' / 'release_data'
             for firstletterdir in datadir.iterdir():
                 # There exist some metadata files which do not interest us
@@ -417,9 +359,9 @@ class PypiDBGenerator(DBGenerator):
                     for second in firstletterdir.iterdir():
                         if second.is_dir():
                             for entry in second.iterdir():
-                                if entry.is_file() and entry.suffix == 'json':
+                                if entry.is_file() and entry.suffix == '.json':
                                     data.update(self.parse_datum(entry))
-                        elif second.is_file() and second.suffix == 'json':
+                        elif second.is_file() and second.suffix == '.json':
                             # Some entries are on the first level
                             data.update(self.parse_datum(second))
         return data
@@ -452,7 +394,7 @@ class PypiDBGenerator(DBGenerator):
                                       'name': 'Markus Walter'}]
         pkg_db.set_common_data(category, common_data)
 
-        for package, pkg_data in data['packages'].items():
+        for package, pkg_data in data['main.zip'].items():
             self.process_datum(pkg_db, common_config, config, package,
                                pkg_data)
 
@@ -469,7 +411,7 @@ class PypiDBGenerator(DBGenerator):
         for v, datum in pkg_data.items():
             for distmeta in datum['urls']:
                 if distmeta['packagetype'] == 'sdist':
-                    currentdate = datetime.fromisoformat(
+                    currentdate = datetime.datetime.fromisoformat(
                         distmeta['upload_time_iso_8601'])
                     if mtime is None or mtime < currentdate:
                         mtime = currentdate
