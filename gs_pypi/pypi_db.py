@@ -11,7 +11,6 @@
     :license: GPL-2, see LICENSE for more details.
 """
 
-import copy
 import datetime
 import enum
 import json
@@ -24,7 +23,6 @@ import string
 import subprocess
 import tempfile
 
-from g_sorcery.exceptions import DBLayoutError
 from g_sorcery.g_collections import (
     Dependency, Package, serializable_elist, Version)
 from g_sorcery.package_db import DBGenerator
@@ -351,7 +349,7 @@ class PypiDBGenerator(DBGenerator):
         with tempfile.TemporaryDirectory() as tmpdirname:
             tmpdir = pathlib.Path(tmpdirname)
             subprocess.run(['unzip', str(zipfile), '-d', str(tmpdir)],
-                           stdout=subprocess.DEVNULL)
+                           stdout=subprocess.DEVNULL, check=True)
             datadir = tmpdir / 'pypi-json-data-main' / 'release_data'
             for firstletterdir in datadir.iterdir():
                 # There exist some metadata files which do not interest us
