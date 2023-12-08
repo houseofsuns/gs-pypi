@@ -318,6 +318,8 @@ class PypiDBGenerator(DBGenerator):
             [common_config, config], 'wanted'))
         self.substitutions = self.combine_config_dicts(
             [common_config, config], 'substitute')
+        self.nonice = set(self.combine_config_lists(
+            [common_config, config], 'nonice'))
         # Now proceed with normal flow
         super().generate_tree(pkg_db, common_config, config)
 
@@ -521,7 +523,8 @@ class PypiDBGenerator(DBGenerator):
                 filename = filename.replace(pattern, replacement)
             filename = filename + suffix
             if (re.match(r'\$\{REALNAME[-_/]*\}-\$\{REALVERSION\}', filename)
-                    and package[0] in string.ascii_letters + string.digits):
+                    and package[0] in string.ascii_letters + string.digits
+                    and package not in self.nonice):
                 # Use redirect URL to avoid churn through the embedded hashes
                 # in the actual URL
                 nice_src_uri = (

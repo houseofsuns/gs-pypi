@@ -753,6 +753,9 @@
             "zesty-zbs-api-securonix",
             "zsdstools"
         ],
+        "nonice": [
+            "ais-dom-frontend"
+        ],
         "wanted": [
             "subman",
             "schulze-condorcet",
