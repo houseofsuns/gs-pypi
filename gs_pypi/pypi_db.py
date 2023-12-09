@@ -534,7 +534,7 @@ class PypiDBGenerator(DBGenerator):
                 filename = filename.replace(pattern, replacement)
             filename = filename + suffix
             npattern = r'\$\{(LITERALNAME|REALNAME)[-_/]*\}-\$\{REALVERSION\}'
-            if (mo := re.match(npattern, filename)
+            if ((mo := re.match(npattern, filename))
                     and package[0] in string.ascii_letters + string.digits
                     and package not in self.nonice):
                 name = mo.group(1)
