@@ -26,7 +26,7 @@ class PypiEbuildWithoutDigestGenerator(DefaultEbuildGenerator):
     """
     def __init__(self, package_db):
         vars_before_inherit = [
-            "realname", "realversion", "repo_uri", "sourcefile",
+            "realname", "literalname", "realversion", "repo_uri", "sourcefile",
             {"name": "python_compat", "raw": True},
             {
                 "name": "distutils_use_pep517",
@@ -62,7 +62,7 @@ class PypiEbuildWithDigestGenerator(DefaultEbuildGenerator):
     """
     def __init__(self, package_db):
         vars_before_inherit = [
-            "realname", "realversion",
+            "realname", "literalname", "realversion",
             {"name": "digest_sources", "value": "yes"},
             {"name": "python_compat", "raw": True},
             {

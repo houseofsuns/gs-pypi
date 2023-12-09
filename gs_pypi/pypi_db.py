@@ -480,6 +480,12 @@ class PypiDBGenerator(DBGenerator):
                     useflags.add(extra)
 
         filtered_package = filter_package_name(package, self.substitutions)
+        # Some packages have uppercase letters in their names that are
+        # normalized in much of the PyPI pipeline but exposed in others
+        literal_package = pkg_datum['info']['name']
+        if literal_package.lower() != package:
+            _logger.warn(
+                f'Unexpected package name {literal_package} for {package}.')
 
         filtered_description = self.escape_bash_string(self.strip_characters(
             pkg_datum['info']['summary'] or ''))
@@ -516,20 +522,27 @@ class PypiDBGenerator(DBGenerator):
             src_uri_filters = [
                 (f'{version}', '${REALVERSION}'),
                 (f'{package}', '${REALNAME}'),
+                (f'{literal_package}', '${LITERALNAME}'),
                 (f'{package.replace("-", "_")}', '${REALNAME//-/_}'),
                 (f'{package.replace("_", "-")}', '${REALNAME//_/-}'),
+                (f'{literal_package.replace("-", "_")}',
+                 '${LITERALNAME//-/_}'),
+                (f'{literal_package.replace("_", "-")}',
+                 '${LITERALNAME//_/-}'),
             ]
             for pattern, replacement in src_uri_filters:
                 filename = filename.replace(pattern, replacement)
             filename = filename + suffix
-            if (re.match(r'\$\{REALNAME[-_/]*\}-\$\{REALVERSION\}', filename)
+            npattern = r'\$\{(LITERALNAME|REALNAME)[-_/]*\}-\$\{REALVERSION\}'
+            if (mo := re.match(npattern, filename)
                     and package[0] in string.ascii_letters + string.digits
                     and package not in self.nonice):
+                name = mo.group(1)
                 # Use redirect URL to avoid churn through the embedded hashes
                 # in the actual URL
                 nice_src_uri = (
                     f'https://files.pythonhosted.org/packages/source'
-                    f'/${{REALNAME::1}}/${{REALNAME}}/{filename}')
+                    f'/${{{name}::1}}/${{{name}}}/{filename}')
             else:
                 _logger.warn(f'Unsubstituted SRC_URI `{src_uri}`.')
                 nice_src_uri = filepath + filename
@@ -539,6 +552,9 @@ class PypiDBGenerator(DBGenerator):
         ebuild_data = {}
         ebuild_data["realname"] = (
             "${PN}" if package == filtered_package else package)
+        ebuild_data["literalname"] = (
+            "${PN}" if filtered_package == literal_package
+            else literal_package)
         ebuild_data["realversion"] = (
             "${PV}" if version == filtered_version else version)
         ebuild_data["mtime"] = mtime.isoformat()
