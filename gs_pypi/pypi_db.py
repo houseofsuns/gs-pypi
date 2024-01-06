@@ -394,11 +394,14 @@ class PypiDBGenerator(DBGenerator):
         Process one parsed package datum.
         """
         category = "dev-python"
+        aberrations = []
 
         pkg_datum = None
         mtime = None
         src_uri = None
+        best_ver = None
         for v, datum in pkg_data.items():
+            cur_ver = parse_version(datum['info']['version'])
             for distmeta in datum['urls']:
                 if distmeta['packagetype'] == 'sdist':
                     currentdate = datetime.datetime.fromisoformat(
@@ -407,11 +410,17 @@ class PypiDBGenerator(DBGenerator):
                         mtime = currentdate
                         pkg_datum = datum
                         src_uri = distmeta['url']
+                        best_ver = cur_ver
+            if best_ver and cur_ver > best_ver:
+                _logger.warn(f'Dropped better version `{cur_ver}`.')
         if not src_uri:
             _logger.warn(f'No source distfile for {package} -- dropping.')
             return
 
         version = pkg_datum['info']['version']
+        top_version = max(map(parse_version, pkg_data))
+        if top_version > parse_version(version):
+            aberrations.append(f"topver {top_version}")
         homepage = pkg_datum['info']['home_page'] or ""
         if not homepage:
             purls = pkg_datum['info'].get('project_urls') or {}
@@ -477,8 +486,6 @@ class PypiDBGenerator(DBGenerator):
             _logger.warn(
                 f'Unexpected package name {literal_package} for {package}.')
 
-        filtered_description = self.escape_bash_string(self.strip_characters(
-            pkg_datum['info']['summary'] or ''))
         filtered_version = version
         version_filters = [(r'^(.*[0-9]+)\.?a([0-9]+)$', r'\1_alpha\2'),
                            (r'^(.*[0-9]+)\.?b([0-9]+)$', r'\1_beta\2'),
@@ -496,6 +503,7 @@ class PypiDBGenerator(DBGenerator):
                 mtime.year, mtime.month, mtime.day)
             _logger.warn(f'Version {bad_version} is bad'
                          f' using {filtered_version}.')
+            aberrations.append(f"badver {bad_version}")
 
         nice_src_uri = src_uri
         filename = src_uri.split('/')[-1]
@@ -538,6 +546,12 @@ class PypiDBGenerator(DBGenerator):
                 nice_src_uri = filepath + filename
         else:
             _logger.warn(f'Unexpected SRC_URI `{src_uri}`.')
+
+        description = pkg_datum['info']['summary'] or ''
+        if aberrations:
+            description += " [" + ", ".join(aberrations) + "]"
+        filtered_description = self.escape_bash_string(self.strip_characters(
+            description))
 
         ebuild_data = {}
         ebuild_data["realname"] = (
