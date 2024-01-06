@@ -393,6 +393,7 @@ class PypiDBGenerator(DBGenerator):
         """
         Process one parsed package datum.
         """
+        _logger.info(f'Processing {package}.')
         category = "dev-python"
         aberrations = []
 
