@@ -17,7 +17,6 @@ import json
 import operator
 import os
 import pathlib
-import pprint
 import re
 import string
 import subprocess
@@ -43,17 +42,8 @@ def containment(fun):
             return fun(*args, **kwargs)
         except:
             import traceback
-            traceback.print_exc()
-            print('ARGUMENTS', args, kwargs)
-            import pathlib
-            p = pathlib.Path.home() / 'gs-pypi-tracebacks/'
-            p.mkdir(parents=True, exist_ok=True)
-            num = len(list(p.glob('*')))
-            with open(p / f'tb-{num:05}.txt', 'w') as f:
-                traceback.print_exc(file=f)
-                f.write('ARGUMENTS\n')
-                pprint.pprint(args, f)
-                pprint.pprint(kwargs, f)
+            _logger.error(traceback.format_exc())
+            _logger.error(f'ARGUMENTS {args=} {kwargs=}')
 
     return newfun
 
