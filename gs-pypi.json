@@ -292,6 +292,7 @@
             "0.0.1",
             "2.5D",
             "uselesscapitalquiz",
+            "sublime-music",
 
             "1bead-org",
             "4",
@@ -71620,7 +71621,7 @@
             "componentize-py",
             "scratch-getdata",
             "jsonfmt",
-            "sublime-music",
+            "sublime_music",
             "pyproject2conda",
             "elefantolib-fastapi",
             "traffsimpy",
