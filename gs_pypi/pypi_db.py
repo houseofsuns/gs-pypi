@@ -22,6 +22,8 @@ import string
 import subprocess
 import tempfile
 
+from g_sorcery.exceptions import DownloadingError
+from g_sorcery.fileutils import wget
 from g_sorcery.g_collections import (
     Dependency, Package, serializable_elist, Version)
 from g_sorcery.package_db import DBGenerator
@@ -310,8 +312,25 @@ class PypiDBGenerator(DBGenerator):
             [common_config, config], 'substitute')
         self.nonice = set(self.combine_config_lists(
             [common_config, config], 'nonice'))
+        self.mainpkgs = self.lookupmaintree(common_config, config)
         # Now proceed with normal flow
         super().generate_tree(pkg_db, common_config, config)
+
+    def lookupmaintree(self, common_config, config):
+        ret = set()
+        fname = "dev-python.html"
+        pattern = (
+            r'<a[^>]*/gentoo.git/tree/dev-python[^>]*>([-a-zA-Z0-9\._]+)</a')
+        with tempfile.TemporaryDirectory() as download_dir:
+            if wget(config['gentoo_main_uri'], download_dir, fname):
+                raise DownloadingError("Retrieving main tree directory failed")
+            with open(pathlib.Path(download_dir) / fname) as htmlfile:
+                for line in htmlfile.readlines():
+                    if 'd---------' in line:
+                        if mo := re.search(pattern, line):
+                            ret.add(mo.group(1))
+        _logger.info(f'Total of main tree packages: {len(ret)}.')
+        return ret
 
     def get_download_uries(self, common_config, config):
         """
@@ -469,13 +488,19 @@ class PypiDBGenerator(DBGenerator):
         useflags = set()
         for dep in requires_dist:
             for extra in (dep['extras'] or [""]):
-                # ignore version bound (found in dep["versionbound"]) as we
-                # only provide the most recent version anyway so there is no
-                # choice. Additionally this fixes broken dependency specs
-                # where there either is an error or which are simply outdated.
+                if (dep['name'] in self.mainpkgs) and dep["versionbound"]:
+                    # keep version bounds for packages in the main tree as
+                    # there will probably be some choice in the relevant cases
+                    dop, dver = dep["versionbound"]
+                else:
+                    # ignore version bound as we only provide the most recent
+                    # version anyway so there is no choice. Additionally this
+                    # fixes broken dependency specs where there either is an
+                    # error or which are simply outdated.
+                    dop, dver = "", ""
                 dependencies.append(Dependency(
                     category, dep['name'], usedep='${PYTHON_USEDEP}',
-                    useflag=extra))
+                    useflag=extra, version=str(dver), operator=str(dop)))
                 if extra:
                     useflags.add(extra)
 

@@ -5,6 +5,7 @@
         "pypi": {
             "repo_uri": "https://pypi.org",
             "data_uri": "https://github.com/pypi-data/pypi-json-data/archive/refs/heads/main.zip",
+            "gentoo_main_uri": "https://gitweb.gentoo.org/repo/gentoo.git/tree/dev-python",
             "masters": ["gentoo"]
         }
     },
