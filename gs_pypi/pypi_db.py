@@ -348,8 +348,23 @@ class PypiDBGenerator(DBGenerator):
             # we only include a selected set of packages as otherwise the
             # overlay becomes unwieldy
             return {}
+        self.check_confusion(datapath)
         with open(datapath, 'r') as datafile:
             return {package: json.load(datafile)}
+
+    def check_confusion(self, entry):
+        name = entry.stem
+        checks = []
+        if '-' in name:
+            checks.append(('-', '_'))
+        if '_' in name:
+            checks.append(('_', '-'))
+        for check in checks:
+            newname = name.replace(*check)
+            candidate = entry.parent / f'{newname}{entry.suffix}'
+            if candidate.exists():
+                _logger.warn(f'Possible hyphen-confusion: {name} and'
+                             f' {newname}')
 
     def parse_data(self, data_f):
         """
