@@ -50,6 +50,10 @@ def containment(fun):
     return newfun
 
 
+def pypi_normalize(pkg):
+    return pkg.lower().replace('_', '-').replace('.', '-')
+
+
 class Operator(enum.Enum):
     LESS = 1
     LESSEQUAL = 2
@@ -167,7 +171,8 @@ def extract_requires_dist(requires_dist, substitutions):
             # (or better lack of hits) with the main tree
 
             dep = {
-                'name': filter_package_name(name, substitutions),
+                'name': sanitize_package_name(resolve_package_name(
+                    name, substitutions)),
                 'versionbound': None,
                 'extras': [],
             }
@@ -265,12 +270,9 @@ def extract_requires_dist(requires_dist, substitutions):
     return ret
 
 
-def filter_package_name(package, substitutions):
-    if replacement := substitutions.get(package):
-        # Perform some fixed substitutions, primarily to converge with naming
-        # in the main tree
-        return replacement
-    return sanitize_package_name(package)
+def resolve_package_name(package, substitutions):
+    normalized = pypi_normalize(package)
+    return substitutions.get(normalized, normalized)
 
 
 def sanitize_package_name(package):
@@ -348,23 +350,17 @@ class PypiDBGenerator(DBGenerator):
             # we only include a selected set of packages as otherwise the
             # overlay becomes unwieldy
             return {}
-        self.check_confusion(datapath)
+        if package != pypi_normalize(package):
+            _logger.warn(f'Unnormalized input package {package}.')
+        resolved = resolve_package_name(package, self.substitutions)
+        if resolved != package:
+            alternative = datapath.parent / f'{resolved}.json'
+            if alternative.exists():
+                _logger.info(f'Switching data source {package} to {resolved}.')
+                datapath = alternative
         with open(datapath, 'r') as datafile:
-            return {package: json.load(datafile)}
-
-    def check_confusion(self, entry):
-        name = entry.stem
-        checks = []
-        if '-' in name:
-            checks.append(('-', '_'))
-        if '_' in name:
-            checks.append(('_', '-'))
-        for check in checks:
-            newname = name.replace(*check)
-            candidate = entry.parent / f'{newname}{entry.suffix}'
-            if candidate.exists():
-                _logger.warn(f'Possible hyphen-confusion: {name} and'
-                             f' {newname}')
+            data = json.load(datafile)
+            return {resolved: data}
 
     def parse_data(self, data_f):
         """
@@ -519,14 +515,9 @@ class PypiDBGenerator(DBGenerator):
                 if extra:
                     useflags.add(extra)
 
-        filtered_package = filter_package_name(package, self.substitutions)
-        # Some packages have uppercase letters in their names that are
-        # normalized in much of the PyPI pipeline but exposed in others
+        filtered_package = sanitize_package_name(package)
+        # for accounting note the actual name of the package
         literal_package = pkg_datum['info']['name']
-        if literal_package.lower() != package:
-            _logger.warn(
-                f'Unexpected package name {literal_package} for {package}.')
-
         filtered_version = version
         version_filters = [(r'^(.*[0-9]+)\.?a([0-9]+)$', r'\1_alpha\2'),
                            (r'^(.*[0-9]+)\.?b([0-9]+)$', r'\1_beta\2'),
