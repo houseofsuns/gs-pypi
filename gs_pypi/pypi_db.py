@@ -427,6 +427,8 @@ class PypiDBGenerator(DBGenerator):
         category = "dev-python"
         aberrations = []
 
+        fromiso = datetime.datetime.fromisoformat
+
         pkg_datum = None
         mtime = None
         src_uri = None
@@ -435,23 +437,34 @@ class PypiDBGenerator(DBGenerator):
             cur_ver = parse_version(datum['info']['version'])
             for distmeta in datum['urls']:
                 if distmeta['packagetype'] == 'sdist':
-                    currentdate = datetime.datetime.fromisoformat(
-                        distmeta['upload_time_iso_8601'])
-                    if mtime is None or mtime < currentdate:
+                    currentdate = fromiso(distmeta['upload_time_iso_8601'])
+                    if best_ver is None or best_ver < cur_ver:
                         mtime = currentdate
                         pkg_datum = datum
                         src_uri = distmeta['url']
                         best_ver = cur_ver
-            if best_ver and cur_ver > best_ver:
-                _logger.warn(f'Dropped better version `{cur_ver}`.')
+            if mtime and currentdate and currentdate > mtime:
+                _logger.warn(f'Dropped newer version `{cur_ver}`.')
         if not src_uri:
             _logger.warn(f'No source distfile for {package} -- dropping.')
             return
+
+        longago = datetime.datetime(2000, 1, 1, tzinfo=datetime.UTC)
+
+        def extract_upload_time(adatum):
+            return max((fromiso(bundle['upload_time_iso_8601'])
+                       for bundle in adatum['urls']),
+                       default=longago)
 
         version = pkg_datum['info']['version']
         top_version = max(map(parse_version, pkg_data))
         if top_version > parse_version(version):
             aberrations.append(f"topver {top_version}")
+        upload_time = extract_upload_time(pkg_datum)
+        newest = max(pkg_data.values(), key=extract_upload_time)
+        if extract_upload_time(newest) > upload_time:
+            aberrations.append(f"newver {newest['info']['version']}")
+
         homepage = pkg_datum['info']['home_page'] or ""
         if not homepage:
             purls = pkg_datum['info'].get('project_urls') or {}
