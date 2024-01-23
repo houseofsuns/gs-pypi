@@ -438,7 +438,8 @@ class PypiDBGenerator(DBGenerator):
             for distmeta in datum['urls']:
                 if distmeta['packagetype'] == 'sdist':
                     currentdate = fromiso(distmeta['upload_time_iso_8601'])
-                    if best_ver is None or best_ver < cur_ver:
+                    if (best_ver is None or best_ver < cur_ver or
+                            (best_ver == cur_ver and currentdate > mtime)):
                         mtime = currentdate
                         pkg_datum = datum
                         src_uri = distmeta['url']
