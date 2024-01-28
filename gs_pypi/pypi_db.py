@@ -76,16 +76,41 @@ class Operator(enum.Enum):
         return comparators[self](first, second)
 
 
-def parse_version(s, minlength=0):
-    if mo := re.fullmatch(r'([0-9]+[\.0-9]*)(.*)', s.strip()):
-        version, tail = mo.groups('0')
+def parse_version(s, minlength=0, strict=False):
+    if mo := re.fullmatch(r'(rev|v)?([0-9]+[\.0-9]*)(.*)', s.strip(), re.I):
+        _, version, tail = mo.groups('0')
         components = tuple(map(int, filter(None, version.split('.'))))
-        if tail and tail not in {'*', 'dev'}:
-            _logger.warn(f'Omitted version tail `{tail}`.')
         if len(components) < minlength:
             components += (0,) * (minlength - len(components))
-        return Version(components)
+        parts = {'components': components}
+        if tail:
+            if mo := re.fullmatch(r'[-_\.]?(a|alpha)[-_\.]?([0-9]+)',
+                                  tail, re.I):
+                parts['alpha'] = int(mo.group(2))
+            elif mo := re.fullmatch(r'[-_\.]?(b|beta)[-_\.]?([0-9]+)',
+                                    tail, re.I):
+                parts['beta'] = int(mo.group(2))
+            elif mo := re.fullmatch(r'[-_\.]?(dev|pre)[-_\.]?r?([0-9]+)',
+                                    tail, re.I):
+                parts['pre'] = int(mo.group(2))
+            elif tail == 'dev':
+                parts['pre'] = 0
+            elif mo := re.fullmatch(r'[-_\.]?rc[-_\.]?([0-9]+)',
+                                    tail, re.I):
+                parts['rc'] = int(mo.group(1))
+            elif mo := re.fullmatch(r'[-_\.]?(p|post)?[-_\.]?([0-9]+)',
+                                    tail, re.I):
+                parts['p'] = int(mo.group(2))
+            elif tail == '*':
+                pass
+            else:
+                if strict:
+                    raise ValueError(f'Invalid version `{s}`.')
+                _logger.warn(f'Omitted version tail `{tail}`.')
+        return Version(**parts)
     else:
+        if strict:
+            raise ValueError(f'Unparsable version `{s}`.')
         _logger.warn(f'Unparsable version `{s}`.')
         return Version((0,) * max(2, minlength))
 
