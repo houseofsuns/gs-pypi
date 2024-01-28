@@ -28,21 +28,13 @@ class PypiEbuildWithoutDigestGenerator(DefaultEbuildGenerator):
         vars_before_inherit = [
             "realname", "literalname", "realversion", "repo_uri", "sourcefile",
             {"name": "python_compat", "raw": True},
-            {
-                "name": "distutils_use_pep517",
-                "value": "standalone",
-                "raw": True
-            },
-        ]
+            {"name": "distutils_use_pep517", "raw": True}]
 
         inherit = ["python-r1", "gs-pypi"]
 
         vars_after_description = [
             "homepage", "license",
-            {
-                "name": "restrict",
-                "value": "test",
-            }]
+            {"name": "restrict", "value": "test"}]
 
         vars_after_keywords = [
             "iuse", "dependencies",
@@ -65,21 +57,13 @@ class PypiEbuildWithDigestGenerator(DefaultEbuildGenerator):
             "realname", "literalname", "realversion",
             {"name": "digest_sources", "value": "yes"},
             {"name": "python_compat", "raw": True},
-            {
-                "name": "distutils_use_pep517",
-                "value": "standalone",
-                "raw": True
-            },
-        ]
+            {"name": "distutils_use_pep517", "raw": True},]
 
         inherit = ["python-r1", "gs-pypi"]
 
         vars_after_description = [
             "homepage", "license", "src_uri", "sourcefile",
-            {
-                "name": "restrict",
-                "value": "test",
-            }]
+            {"name": "restrict", "value": "test"}]
 
         vars_after_keywords = [
             "iuse", "dependencies",

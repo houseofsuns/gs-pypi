@@ -396,8 +396,11 @@ class PypiDBGenerator(DBGenerator):
     def maybe_add_package(self, pkg_db, package, data):
         nout = self.name_output(data['realname'], package.name)
         if pkg_db.in_category(package.category, package.name):
-            _logger.warn(f"Rejected package {nout} for collision.")
-            return False
+            versions = pkg_db.list_package_versions(package.category,
+                                                    package.name)
+            if package.version in versions:
+                _logger.warn(f"Rejected package {nout} for collision.")
+                return False
         pkg_db.add_package(package, data)
         return True
 
@@ -424,48 +427,141 @@ class PypiDBGenerator(DBGenerator):
         Process one parsed package datum.
         """
         _logger.info(f'Processing {package}.')
-        category = "dev-python"
-        aberrations = []
 
         fromiso = datetime.datetime.fromisoformat
 
-        pkg_datum = None
-        mtime = None
-        src_uri = None
-        best_ver = None
-        for v, datum in pkg_data.items():
-            cur_ver = parse_version(datum['info']['version'])
-            for distmeta in datum['urls']:
-                if distmeta['packagetype'] == 'sdist':
-                    currentdate = fromiso(distmeta['upload_time_iso_8601'])
-                    if (best_ver is None or best_ver < cur_ver or
-                            (best_ver == cur_ver and currentdate > mtime)):
-                        mtime = currentdate
-                        pkg_datum = datum
-                        src_uri = distmeta['url']
-                        best_ver = cur_ver
-            if mtime and currentdate and currentdate > mtime:
-                _logger.warn(f'Dropped newer version `{cur_ver}`.')
-        if not src_uri:
-            _logger.warn(f'No source distfile for {package} -- dropping.')
-            return
+        def is_prod(v):
+            return all(part is None for part in [v.alpha, v.beta, v.pre, v.rc])
 
-        longago = datetime.datetime(2000, 1, 1, tzinfo=datetime.UTC)
+        select = {
+            variant: {
+                'key': None,
+                'pkg_datum': None,
+                'src_uri': None,
+                'use_wheel': 'wheel' in variant,
+                'aberrations': [],
+            }
+            for variant in ['top', 'top-wheel', 'prod', 'prod-wheel',
+                            'new', 'new-wheel']
+        }
+        select['top']['extract'] = select['top-wheel']['extract'] = (
+            lambda d: parse_version(d['info']['version']))
+        select['prod']['extract'] = select['prod-wheel']['extract'] = (
+            lambda d: (is_prod(v := parse_version(d['info']['version'])), v))
+        select['new']['extract'] = select['new-wheel']['extract'] = (
+            lambda d: min(fromiso(entry['upload_time_iso_8601'])
+                          for entry in d['urls']))
 
-        def extract_upload_time(adatum):
-            return max((fromiso(bundle['upload_time_iso_8601'])
-                       for bundle in adatum['urls']),
-                       default=longago)
+        def score_wheel(filename):
+            ret = 0
+            if mo := re.fullmatch(r'.*-([^-]+)-([^-]+)-([^-]+)\.whl',
+                                  filename, re.I):
+                python, abi, platform = mo.groups()
+                python_scores = {
+                    'py3': 200,
+                    r'py2\.py3': 200,
+                    'cp311': 102,
+                    'cp310': 101,
+                    'cp3': 100,
+                }
+                for pattern, bounty in python_scores.items():
+                    if re.match(pattern, python):
+                        ret += bounty
+                        break
+                abi_scores = {
+                    'none': 300,
+                    'py3': 200,
+                    r'py2\.py3': 200,
+                    'cp312': 103,
+                    'cp311': 102,
+                    'cp310': 101,
+                    'cp3': 100,
+                }
+                for pattern, bounty in abi_scores.items():
+                    if re.match(pattern, abi):
+                        ret += bounty
+                        break
+                platform_scores = {
+                    'any': 300,
+                    'linux_(x86_64|amd64)': 200,
+                    'manylinux.*(x86_64|amd64)': 100,
+                }
+                for pattern, bounty in platform_scores.items():
+                    if re.match(pattern, platform):
+                        ret += bounty
+                        break
+            else:
+                _logger.warn(f'Improper wheel file name {filename}')
+            return ret
 
-        version = pkg_datum['info']['version']
-        top_version = max(map(parse_version, pkg_data))
-        if top_version > parse_version(version):
-            aberrations.append(f"topver {top_version}")
-        upload_time = extract_upload_time(pkg_datum)
-        newest = max(pkg_data.values(), key=extract_upload_time)
-        if extract_upload_time(newest) > upload_time:
-            aberrations.append(f"newver {newest['info']['version']}")
+        for datum in reversed(pkg_data.values()):
+            for variant in select.values():
+                if not datum['urls']:
+                    continue
+                key = variant['extract'](datum)
+                if variant['key'] is not None and variant['key'] >= key:
+                    continue
+                wheel_score = 0
+                for entry in datum['urls']:
+                    if variant['use_wheel']:
+                        if entry['packagetype'] == 'bdist_wheel':
+                            score = score_wheel(entry['filename'])
+                            if score > wheel_score:
+                                wheel_score = score
+                                variant.update({
+                                    'key': key,
+                                    'pkg_datum': datum,
+                                    'src_uri': entry['url'],
+                                })
+                    else:
+                        if entry['packagetype'] == 'sdist':
+                            variant.update({
+                                'key': key,
+                                'pkg_datum': datum,
+                                'src_uri': entry['url'],
+                            })
+                            break
 
+        def ref(variant):
+            if variant not in select:
+                return None
+            return select[variant]['pkg_datum']['info']['version']
+
+        for variant in list(select):
+            if select[variant]['key'] is None:
+                del select[variant]
+        for variant in ['top', 'prod', 'new']:
+            if variant not in select or f'{variant}-wheel' not in select:
+                continue
+            if select[variant]['key'] < select[f'{variant}-wheel']['key']:
+                select[variant]['aberrations'].append(
+                    f"{variant}-max {select[f'{variant}-wheel']['key']}")
+            else:
+                del select[f'{variant}-wheel']
+        for suffix in ['', '-wheel']:
+            if ref(f'top{suffix}') == ref(f'prod{suffix}') is not None:
+                del select[f'prod{suffix}']
+            if ref(f'top{suffix}') == ref(f'new{suffix}') is not None:
+                del select[f'new{suffix}']
+            if ref(f'prod{suffix}') == ref(f'new{suffix}') is not None:
+                del select[f'new{suffix}']
+        if len(allref := list(map(ref, select))) > len(set(allref)):
+            _logger.warn(f'Redundant variants selected: {allref}'
+                         f' by {list(select)}')
+
+        if not select:
+            _logger.warn(f'No valid releases for {package} -- dropping.')
+
+        for variant in select.values():
+            self.create_package(
+                pkg_db, common_config, config, package, variant['pkg_datum'],
+                variant['src_uri'], variant['use_wheel'],
+                variant['aberrations'])
+
+    def create_package(self, pkg_db, common_config, config, package, pkg_datum,
+                       src_uri, use_wheel, aberrations):
+        _logger.info(f'Creating {pkg_datum["info"]["version"]}.')
+        category = "dev-python"
         homepage = pkg_datum['info']['home_page'] or ""
         if not homepage:
             purls = pkg_datum['info'].get('project_urls') or {}
@@ -474,6 +570,10 @@ class PypiDBGenerator(DBGenerator):
                 if homepage:
                     break
         homepage = self.escape_bash_string(self.strip_characters(homepage))
+
+        fromiso = datetime.datetime.fromisoformat
+        mtime = min(fromiso(entry['upload_time_iso_8601'])
+                    for entry in pkg_datum['urls'])
 
         pkg_license = pkg_datum['info']['license'] or ''
         # This has to avoid any characters that have a special meaning for
@@ -528,23 +628,17 @@ class PypiDBGenerator(DBGenerator):
                     useflag=extra, version=str(dver), operator=str(dop)))
                 if extra:
                     useflags.add(extra)
+        if use_wheel:
+            useflags.add('+bin-wheel')
 
         filtered_package = sanitize_package_name(package)
         # for accounting note the actual name of the package
         literal_package = pkg_datum['info']['name']
-        filtered_version = version
-        version_filters = [(r'^(.*[0-9]+)\.?a([0-9]+)$', r'\1_alpha\2'),
-                           (r'^(.*[0-9]+)\.?b([0-9]+)$', r'\1_beta\2'),
-                           (r'^(.*[0-9]+)\.?post([0-9]+)$', r'\1_p\2'),
-                           (r'^(.*[0-9]+)\.?rc([0-9]+)$', r'\1_rc\2'),
-                           (r'^(.*[0-9]+)\.?dev([0-9]+)$', r'\1_pre\2')]
-        for pattern, replacement in version_filters:
-            # FIXME convert more versions to acceptable versions
-            filtered_version = re.sub(pattern, replacement, filtered_version)
-        if not re.fullmatch(r'[0-9]+(\.[0-9]+)*[a-z]?'
-                            r'(_(alpha|beta|rc|p|pre)[0-9]+)?',
-                            filtered_version):
-            bad_version = filtered_version
+        version = pkg_datum["info"]["version"]
+        try:
+            filtered_version = str(parse_version(version, strict=True))
+        except ValueError:
+            bad_version = version
             filtered_version = "%04d%02d%02d" % (
                 mtime.year, mtime.month, mtime.day)
             _logger.warn(f'Version {bad_version} is bad'
@@ -594,6 +688,8 @@ class PypiDBGenerator(DBGenerator):
             _logger.warn(f'Unexpected SRC_URI `{src_uri}`.')
 
         description = pkg_datum['info']['summary'] or ''
+        if use_wheel:
+            aberrations.append('wheel')
         if aberrations:
             description += " [" + ", ".join(aberrations) + "]"
         filtered_description = self.escape_bash_string(self.strip_characters(
@@ -622,6 +718,8 @@ class PypiDBGenerator(DBGenerator):
         deplist = serializable_elist(separator="\n\t")
         deplist.extend(dependencies)
         ebuild_data["dependencies"] = deplist
+        ebuild_data["distutils_use_pep517"] = (
+            "wheel" if use_wheel else "standalone")
 
         self.maybe_add_package(
                 pkg_db,
