@@ -1,6 +1,15 @@
 --- distutils-r1.eclass
-+++ gs-distutils-r1.eclass
-@@ -636,7 +636,7 @@
++++ distutils-r1.eclass
+@@ -285,6 +285,8 @@
+ 				;;
+ 			standalone)
+ 				;;
++			wheel)
++				;;
+ 			*)
+ 				die "Unknown DISTUTILS_USE_PEP517=${DISTUTILS_USE_PEP517}"
+ 				;;
+@@ -640,7 +642,7 @@
  	esac
  
  	_DISTUTILS_TEST_RUNNER=${1}
@@ -9,7 +18,7 @@
  
  	if [[ -n ${test_pkgs} ]]; then
  		if [[ ! ${DISTUTILS_SINGLE_IMPL} ]]; then
-@@ -1059,7 +1059,7 @@
+@@ -1063,7 +1065,7 @@
  #
  # At some point in the future, it may also apply eclass-specific
  # distutils patches and/or quirks.
@@ -18,10 +27,10 @@
  	debug-print-function ${FUNCNAME} "${@}"
  	_distutils-r1_check_all_phase_mismatch
  
-@@ -1243,6 +1243,10 @@
+@@ -1247,6 +1249,10 @@
  		# if pyproject.toml exists, try getting the backend from it
  		# NB: this could fail if pyproject.toml doesn't list one
- 		build_backend=$(gpep517 get-backend)
+ 		build_backend=$("${EPYTHON}" -m gpep517 get-backend)
 +		if [[ ${build_backend} == "poetry.masonry.api" ]]; then
 +			# hotfix for renaming issue
 +			build_backend=poetry.core.masonry.api
@@ -29,7 +38,7 @@
  	fi
  	if [[ -z ${build_backend} && ${DISTUTILS_USE_PEP517} == setuptools &&
  		-f setup.py ]]
-@@ -1479,7 +1483,7 @@
+@@ -1486,7 +1492,7 @@
  # In legacy mode, runs 'esetup.py build'. Any parameters passed to this
  # function will be appended to setup.py invocation, i.e. passed
  # as options to the 'build' command.
@@ -38,7 +47,20 @@
  	debug-print-function ${FUNCNAME} "${@}"
  
  	_python_check_EPYTHON
-@@ -1576,7 +1580,7 @@
+@@ -1520,7 +1526,11 @@
+ 	esac
+ 
+ 	if [[ ${DISTUTILS_USE_PEP517} ]]; then
+-		distutils_pep517_install "${BUILD_DIR}/install"
++		if [[ ${DISTUTILS_USE_PEP517} == "wheel" ]]; then
++			distutils_wheel_install "${BUILD_DIR}/install" "${WORKDIR}/${SOURCEFILE}"
++		else
++			distutils_pep517_install "${BUILD_DIR}/install"
++		fi
+ 	fi
+ }
+ 
+@@ -1583,7 +1593,7 @@
  # first.
  #
  # This function is used only if distutils_enable_tests is called.
@@ -47,7 +69,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  
  	if [[ -z ${_DISTUTILS_TEST_RUNNER} ]]; then
-@@ -1623,7 +1627,7 @@
+@@ -1630,7 +1640,7 @@
  # In the legacy mode, calls `esetup.py install` to install the package.
  # Any parameters passed to this function will be appended
  # to the setup.py invocation (i.e. as options to the 'install' command).
@@ -56,7 +78,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  
  	_python_check_EPYTHON
-@@ -1740,7 +1744,7 @@
+@@ -1747,7 +1757,7 @@
  # @FUNCTION: distutils-r1_python_install_all
  # @DESCRIPTION:
  # The default python_install_all(). It installs the documentation.
@@ -65,7 +87,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  	_distutils-r1_check_all_phase_mismatch
  
-@@ -1760,7 +1764,7 @@
+@@ -1767,7 +1777,7 @@
  # If in-source builds are used, the command is executed in the directory
  # holding the per-implementation copy of sources. BUILD_DIR points
  # to the 'build' subdirectory.
@@ -74,7 +96,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  
  	if [[ ${DISTUTILS_IN_SOURCE_BUILD} ]]; then
-@@ -1874,7 +1878,7 @@
+@@ -1886,7 +1896,7 @@
  		# store for restoring after distutils-r1_run_phase.
  		local _DISTUTILS_INITIAL_CWD=${PWD}
  		multibuild_foreach_variant \
@@ -83,7 +105,7 @@
  	fi
  }
  
-@@ -1888,7 +1892,7 @@
+@@ -1900,7 +1910,7 @@
  
  	# store for restoring after distutils-r1_run_phase.
  	local _DISTUTILS_INITIAL_CWD=${PWD}
@@ -92,7 +114,7 @@
  
  	if [[ ! ${DISTUTILS_SINGLE_IMPL} ]]; then
  		local _DISTUTILS_CALLING_FOREACH_IMPL=1
-@@ -1904,16 +1908,27 @@
+@@ -1916,16 +1926,27 @@
  	fi
  }
  
@@ -122,7 +144,7 @@
  	fi
  
  	if [[ ! ${_DISTUTILS_DEFAULT_CALLED} ]]; then
-@@ -1927,7 +1942,7 @@
+@@ -1939,7 +1960,7 @@
  	return ${ret}
  }
  
@@ -131,7 +153,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  	local ret=0
  
-@@ -1979,14 +1994,14 @@
+@@ -1991,14 +2012,14 @@
  	fi
  }
  
@@ -148,7 +170,7 @@
  	fi
  
  	if declare -f python_compile_all >/dev/null; then
-@@ -2022,7 +2037,7 @@
+@@ -2034,7 +2055,7 @@
  	fi
  }
  
@@ -157,7 +179,7 @@
  	debug-print-function ${FUNCNAME} "${@}"
  	local ret=0
  
-@@ -2153,20 +2168,20 @@
+@@ -2165,20 +2186,20 @@
  	fi
  }
  
@@ -181,3 +203,21 @@
  	fi
  
  	_distutils-r1_check_namespace_pth
+@@ -2186,8 +2207,16 @@
+ 	return ${ret}
+ }
+ 
++gs-distutils-r1_src_unpack() {
++	g-sorcery_src_unpack
++	if [[ ${DISTUTILS_USE_PEP517} == "wheel" ]]; then
++		# Make empty S directory, we don't use it, but it's required
++		[ ! -d "${WORKDIR}"/"${P}" ] && mkdir "${WORKDIR}"/"${P}"
++	fi
++}
++
+ fi
+ 
+ if [[ ! ${DISTUTILS_OPTIONAL} ]]; then
+-	EXPORT_FUNCTIONS src_prepare src_configure src_compile src_test src_install
++	EXPORT_FUNCTIONS src_unpack src_prepare src_configure src_compile src_test src_install
+ fi
