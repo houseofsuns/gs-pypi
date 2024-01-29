@@ -703,9 +703,20 @@ class PypiDBGenerator(DBGenerator):
                 name = mo.group(1)
                 # Use redirect URL to avoid churn through the embedded hashes
                 # in the actual URL
-                nice_src_uri = (
-                    f'https://files.pythonhosted.org/packages/source'
-                    f'/${{{name}::1}}/${{{name}}}/{filename}')
+                tag = None
+                if use_wheel:
+                    if mo := re.fullmatch(r'.*-([^-]+)-[^-]+-[^-]+\.whl',
+                                          filename, re.I):
+                        tag = mo.group(1)
+                else:
+                    tag = 'source'
+                if tag:
+                    nice_src_uri = (
+                        f'https://files.pythonhosted.org/packages/{tag}'
+                        f'/${{{name}::1}}/${{{name}}}/{filename}')
+                else:
+                    _logger.warn(f'Unmatched SRC_URI `{src_uri}`.')
+                    nice_src_uri = filepath + filename
             else:
                 _logger.warn(f'Unsubstituted SRC_URI `{src_uri}`.')
                 nice_src_uri = filepath + filename
