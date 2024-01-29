@@ -51,7 +51,7 @@ def containment(fun):
 
 
 def pypi_normalize(pkg):
-    return pkg.lower().replace('_', '-').replace('.', '-')
+    return re.sub(r"[-_.]+", "-", pkg).lower()
 
 
 class Operator(enum.Enum):

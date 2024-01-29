@@ -9,7 +9,7 @@ import requests
 
 
 def pypi_normalize(pkg):
-    return pkg.lower().replace('_', '-').replace('.', '-')
+    return re.sub(r"[-_.]+", "-", pkg).lower()
 
 
 def lookupmaintree():
