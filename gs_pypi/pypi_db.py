@@ -654,7 +654,7 @@ class PypiDBGenerator(DBGenerator):
                 if extra:
                     useflags.add(extra)
         if use_wheel:
-            useflags.add('+bin-wheel')
+            dependencies.append(Dependency("virtual", "allow-pypi-wheels"))
 
         filtered_package = sanitize_package_name(package)
         # for accounting note the actual name of the package
