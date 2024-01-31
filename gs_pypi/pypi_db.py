@@ -699,7 +699,7 @@ class PypiDBGenerator(DBGenerator):
             npattern = r'\$\{(LITERALNAME|REALNAME)[-_/]*\}-\$\{REALVERSION\}'
             if ((mo := re.match(npattern, filename))
                     and package[0] in string.ascii_letters + string.digits
-                    and package not in self.nonice):
+                    and pypi_normalize(package) not in self.nonice):
                 name = mo.group(1)
                 # Use redirect URL to avoid churn through the embedded hashes
                 # in the actual URL
