@@ -12181,7 +12181,9 @@
             "pepperize-cdk-lambda-deno": "pepperize.cdk-lambda-deno",
             "pylinks": "PyLinks",
             "pysigma-backend-uberagent": "pySigma-backend-uberAgent",
-            "realstatsmodelrollout": "RealstatsModelRollout"
+            "realstatsmodelrollout": "RealstatsModelRollout",
+
+            "jinja2": "jinja"
         },
         "wanted": [
             "subman",
