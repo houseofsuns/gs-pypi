@@ -1184,7 +1184,19 @@
             "xw-base-14",
             "ytsaurus-spyt",
             "yuag",
-            "yyxx-game-pkg-dev"
+            "yyxx-game-pkg-dev",
+
+            "ansys-fluent-core",
+            "awsnap",
+            "corpus-content",
+            "ha-av",
+            "md4-fileo",
+            "oasys-hybrid-methods",
+            "prefeitura-rio",
+            "premai",
+            "prismstudio",
+            "python-copasi",
+            "unstract-sdk"
         ],
         "substitute": {
             "0-0-1": "0.0.1",
