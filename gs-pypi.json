@@ -1199,6 +1199,10 @@
             "unstract-sdk"
         ],
         "substitute": {
+            "#comment": "manual substitutions",
+            "jinja2": "jinja2",
+
+            "#comment": "auto-generated substitutions",
             "0-0-1": "0.0.1",
             "01os": "01OS",
             "128autograder": "128Autograder",
